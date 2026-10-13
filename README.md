@@ -1,6 +1,6 @@
 # TurnoControl
 
-Base Android nativa de Fase 0. Incluye navegación y configuración local; las pantallas Calendario, Fichajes y Nómina muestran estados vacíos y explican sus límites. No incluye OCR, documentos PDF, notificaciones, fichajes ni cálculo de nómina.
+Aplicación Android nativa con la base estable de Fase 0 y la Fase 1.1 de importación de imágenes y OCR local, validada manualmente por el usuario. Desde Calendario, abre «Importar imagen» para seleccionar una imagen de la galería o de archivos y ver su texto. No interpreta horarios, identifica trabajadores ni guarda turnos. No incluye documentos PDF, notificaciones, fichajes ni cálculo de nómina.
 
 ## Compilar y verificar
 
@@ -41,6 +41,11 @@ app/src/main/java/com/turnocontrol/
   data/Database.kt                       Entidades, DAO y migración
   data/ConfigurationRepository.kt        Room y preferencias DataStore
   di/StorageModule.kt                    Provisión singleton de Room
+  ui/ImportScreen.kt                     Selectores Android, vista previa y texto
+  ui/ImportViewModel.kt                  Estado temporal y cancelación de importación
+  data/ImageOcr.kt                       Decodificación acotada y ML Kit local
+  domain/OcrDocument.kt                  Bloques, líneas, elementos y geometría
+  di/OcrModule.kt                        Inyección del servicio OCR
 app/schemas/                            Esquemas Room 1 y 2 exportados
 app/src/test/                           Validación y Room con Robolectric
 app/src/androidTest/                    Compose, persistencia y migración en Android
@@ -84,4 +89,4 @@ powershell -NoProfile -File .\scripts\verify-restart.ps1
 
 Si el SDK está en otra ubicación, pasa `-AdbPath C:/ruta/al/Sdk/platform-tools/adb.exe`. El script verifica las dos fases instrumentadas, detiene y relanza únicamente `com.turnocontrol.verification`, y exige un PID diferente con perfil, contrato y cinco tarifas conservados. No debe ejecutarse sobre el paquete privado del usuario.
 
-La aplicación se detiene en Fase 0. Continuar requiere revisión y autorización; no se han preparado acciones de publicación o distribución en Google Play.
+La implementación se detiene en Fase 1.1. Alcance, pruebas, validación manual comunicada por el usuario y cierre local: [docs/FASE_1_1.md](docs/FASE_1_1.md). Continuar a Fase 1.2 requiere autorización; no se han preparado acciones de publicación o distribución en Google Play.

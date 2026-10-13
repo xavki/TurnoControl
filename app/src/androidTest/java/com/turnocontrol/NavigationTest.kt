@@ -19,9 +19,10 @@ class NavigationTest {
             compose.onNodeWithText("TurnoControl · $it").assertIsDisplayed()
         }
         compose.onNodeWithText("Ajustes").performClick()
-        compose.onNodeWithText("Nombre visible").performScrollTo().performTextInput("Perfil ficticio")
-        compose.onNodeWithText("Horas pactadas").performScrollTo().performTextInput("60")
-        compose.onNodeWithText("Tarifa base EUR/h (opcional)").performScrollTo().performTextInput("7,17")
+        // Replacing makes this test repeatable after the isolated restart fixture has run.
+        compose.onNodeWithText("Nombre visible").performScrollTo().performTextReplacement("Perfil ficticio")
+        compose.onNodeWithText("Horas pactadas").performScrollTo().performTextReplacement("60")
+        compose.onNodeWithText("Tarifa base EUR/h (opcional)").performScrollTo().performTextReplacement("7,17")
         compose.onNodeWithText("Guardar configuración").performScrollTo().performClick()
         compose.waitUntil(5000) {
             compose.onAllNodes(hasText("Configuración guardada en este dispositivo.")).fetchSemanticsNodes().isNotEmpty()
@@ -29,7 +30,10 @@ class NavigationTest {
         compose.onNodeWithText("Inicio").performClick()
         compose.onNodeWithText("Perfil local configurado. Aún no hay actividad registrada.").assertIsDisplayed()
         compose.onNodeWithText("Ajustes").performClick()
-        compose.onNodeWithContentDescription("Tema oscuro").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Tema oscuro").performScrollTo()
+        if (compose.onNodeWithContentDescription("Tema oscuro").fetchSemanticsNode().config[SemanticsProperties.ToggleableState] == ToggleableState.Off) {
+            compose.onNodeWithContentDescription("Tema oscuro").performClick()
+        }
         compose.waitUntil(5000) {
             compose.onNodeWithContentDescription("Tema oscuro").fetchSemanticsNode().config[SemanticsProperties.ToggleableState] == ToggleableState.On
         }

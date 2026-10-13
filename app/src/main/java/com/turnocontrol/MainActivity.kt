@@ -23,18 +23,19 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val model: ConfigurationViewModel by viewModels()
+    private val importModel: ImportViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             val dark by model.darkTheme.collectAsStateWithLifecycle()
-            MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) { TurnoApp(model) }
+            MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) { TurnoApp(model, importModel) }
         }
     }
 }
 
 @Composable
-fun TurnoApp(model: ConfigurationViewModel) {
+fun TurnoApp(model: ConfigurationViewModel, importModel: ImportViewModel) {
     val state by model.state.collectAsStateWithLifecycle()
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
@@ -49,6 +50,7 @@ fun TurnoApp(model: ConfigurationViewModel) {
         }
     }) { padding ->
         NavHost(navController = nav, startDestination = "Inicio", modifier = Modifier.padding(padding)) {
+            composable("Importar") { ImportScreen(importModel) { nav.popBackStack() } }
             screens.forEach { title -> composable(title) {
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("TurnoControl · $title", style = MaterialTheme.typography.headlineSmall)
@@ -58,7 +60,10 @@ fun TurnoApp(model: ConfigurationViewModel) {
                             Text("No hay resumen mensual ni próximos turnos disponibles.")
                             Button(onClick = { nav.navigate("Ajustes") }) { Text("Abrir ajustes") }
                         }
-                        "Calendario" -> Text("Todavía no hay turnos. La importación y edición se incorporarán en una fase posterior.")
+                        "Calendario" -> {
+                            Text("Todavía no hay turnos. Puedes reconocer el texto de una imagen; la interpretación de horarios y la edición están pendientes.")
+                            Button(onClick = { nav.navigate("Importar") }) { Text("Importar imagen") }
+                        }
                         "Fichajes" -> Text("Todavía no hay fichajes. El registro de entrada, salida y pausas no está disponible en esta fase.")
                         "Nómina" -> Text("No hay estimaciones. Las tarifas guardadas no generan cálculos hasta definir las reglas laborales aplicables.")
                         "Ajustes" -> ConfigurationForm(state, model)
