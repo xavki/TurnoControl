@@ -39,5 +39,8 @@ interface ConfigurationDao {
 val MIGRATION_1_2 = object : Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("ALTER TABLE PayRule ADD COLUMN currency TEXT NOT NULL DEFAULT 'EUR'") }
 }
-@Database(entities = [Profile::class, Contract::class, PayRule::class], version = 2, exportSchema = true)
-abstract class TurnoDatabase : RoomDatabase() { abstract fun configuration(): ConfigurationDao }
+@Database(entities = [Profile::class, Contract::class, PayRule::class, ScheduledDay::class, ScheduledInterval::class], version = 4, exportSchema = true)
+abstract class TurnoDatabase : RoomDatabase() {
+    abstract fun configuration(): ConfigurationDao
+    abstract fun schedule(): ScheduleDao
+}

@@ -4,6 +4,10 @@ import android.os.Process
 import androidx.room.Room
 import androidx.test.platform.app.InstrumentationRegistry
 import com.turnocontrol.domain.ConfigurationDraft
+import com.turnocontrol.domain.PlannedDay
+import com.turnocontrol.domain.DayKind
+import com.turnocontrol.domain.TimeCellParser
+import java.time.LocalDate
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
@@ -25,10 +29,19 @@ class RestartPersistenceTest {
         require(mode == null || mode in listOf("seed", "verify"))
         // Normal suite uses its own DB; host phases exercise the app's actual DB.
         val name = if (mode == null) "restart-suite.db" else "turnocontrol.db"
-        fun open() = Room.databaseBuilder(context, TurnoDatabase::class.java, name).addMigrations(MIGRATION_1_2).build()
+        fun open() = Room.databaseBuilder(context, TurnoDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
         if (mode != "verify") {
             val db = open()
-            try { ConfigurationRepository(db, context).save(fixture) } finally { db.close() }
+            try {
+                ConfigurationRepository(db, context).save(fixture)
+                val schedule = ScheduleRepository(db)
+                // Only isolated synthetic data; real user's app is never targeted.
+                val previous = schedule.snapshot()
+                schedule.save(previous, listOf(
+                    PlannedDay(LocalDate.parse("2026-01-30"), DayKind.WORK, TimeCellParser.parse("08:00-12:00 / 16:00-20:00").intervals),
+                    PlannedDay(LocalDate.parse("2026-01-31"), DayKind.WORK, TimeCellParser.parse("22:00-24:00 / 00:00-01:00").intervals.mapIndexed { index, interval -> interval.copy(isExtra = index == 1) })
+                ), deletions = previous.map { LocalDate.parse(it.day.date) }.filter { it.toString() !in listOf("2026-01-30", "2026-01-31") }.toSet())
+            } finally { db.close() }
             if (mode == "seed") {
                 context.getSharedPreferences("restart-test-proof", 0).edit().putInt("seedPid", Process.myPid()).commit()
                 return@runTest
@@ -41,6 +54,13 @@ class RestartPersistenceTest {
             assertNotNull(savedProfile)
             assertEquals(fixture, repository.load(savedProfile!!))
             assertEquals(5, db.configuration().rates().size)
+            val planned = ScheduleRepository(db).snapshot().map { it.planned() }
+            assertEquals(2, planned.size)
+            assertEquals(2, planned[0].intervals.size)
+            assertEquals(LocalDate.parse("2026-01-31"), planned[1].date)
+            assertEquals(1, planned[1].intervals.first().endDayOffset)
+            assertTrue(planned[1].intervals.last().isExtra)
+            assertFalse(planned[1].intervals.first().isExtra)
             if (mode == "verify") {
                 val oldPid = context.getSharedPreferences("restart-test-proof", 0).getInt("seedPid", -1)
                 assertTrue("Seed process must have run", oldPid > 0)

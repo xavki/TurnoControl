@@ -1,6 +1,6 @@
 # TurnoControl
 
-Aplicación Android nativa con la base estable de Fase 0 y la Fase 1.1 de importación de imágenes y OCR local, validada manualmente por el usuario. Desde Calendario, abre «Importar imagen» para seleccionar una imagen de la galería o de archivos y ver su texto. No interpreta horarios, identifica trabajadores ni guarda turnos. No incluye documentos PDF, notificaciones, fichajes ni cálculo de nómina.
+Aplicación Android nativa centrada en un calendario mensual/semanal de turnos programados. Detalle por día, editor normal/partido con rueda de horas y minutos, clasificación extra por intervalo y guardado local sin exigir contrato ni tarifas. Cuatro pestañas: Calendario, Horas extras, Nómina y Ajustes. La fotografía es una entrada alternativa desde Ajustes → Importar horario: OCR local → trabajador → revisión → conflictos → confirmación explícita. No incluye documentos PDF, notificaciones, fichajes reales ni cálculo de nómina. El rediseño está pendiente de revisión visual y funcional y no tiene commit.
 
 ## Compilar y verificar
 
@@ -46,7 +46,23 @@ app/src/main/java/com/turnocontrol/
   data/ImageOcr.kt                       Decodificación acotada y ML Kit local
   domain/OcrDocument.kt                  Bloques, líneas, elementos y geometría
   di/OcrModule.kt                        Inyección del servicio OCR
-app/schemas/                            Esquemas Room 1 y 2 exportados
+  domain/ScheduleInterpretation.kt       Resultados provisionales y parser horario estricto
+  domain/WorkerRowsInterpreter.kt        Reconstrucción geométrica independiente de Android
+  domain/WeeklyReportInterpreter.kt      Siete fechas, filas multilínea y perspectiva
+  domain/ReportCellParser.kt             Anotaciones admitidas, LIB y VAC provisional
+  ui/ScheduleReviewViewModel.kt          Interpretación y correcciones temporales
+  ui/ScheduleReviewScreen.kt             Revisión del trabajador y sus días
+  ui/OcrRowSelector.kt                   Selección explícita sobre foto o lista de filas
+  di/ScheduleModule.kt                   Estrategia de interpretación mediante Hilt
+  domain/PlannedSchedule.kt              Validación de planificación y solapamientos
+  data/ScheduleStorage.kt                Tablas de días/intervalos, DAO y migraciones hasta 4
+  data/ScheduleRepository.kt             Guardado atómico y control de cambios concurrentes
+  ui/CalendarViewModel.kt                Calendario, editor y confirmación de propuestas
+  ui/CalendarScreen.kt                   Mes/Semana y confirmación de conflictos OCR
+  ui/DayDetailScreen.kt                  Detalle, edición por intervalo y estados del día
+  ui/TimeWheel.kt                        Ruedas Compose de horas/minutos y accesibilidad
+  ui/ExtrasScreen.kt                     Extras declaradas por fecha y subtotal
+app/schemas/                            Esquemas Room 1, 2, 3 y 4 exportados
 app/src/test/                           Validación y Room con Robolectric
 app/src/androidTest/                    Compose, persistencia y migración en Android
 ```
@@ -64,9 +80,9 @@ Las horas se guardan como minutos enteros, las cantidades monetarias como cadena
 
 ## Persistencia y evolución
 
-Room contiene `Profile`, `Contract` y `PayRule`, las entidades necesarias para esta fase. Contrato y tarifas referencian el perfil mediante claves foráneas e índices. Las entidades de turnos, importaciones, fichajes, periodos salariales y comparación de nóminas se añadirán con sus funciones, sin persistir estructuras ficticias ahora.
+Room contiene `Profile`, `Contract`, `PayRule`, `ScheduledDay` y `ScheduledInterval`. El calendario necesita únicamente un perfil mínimo local; no crea contratos ni tarifas. Los turnos confirmados se guardan separados del OCR provisional y de futuros fichajes reales. No se persisten imágenes ni el texto OCR completo.
 
-El esquema inicial 1 conserva la configuración; el esquema 2 añade una moneda explícita `EUR` a `PayRule`. `MIGRATION_1_2` mantiene los datos existentes. Ambos JSON están incluidos; no hay `fallbackToDestructiveMigration`. Las siguientes modificaciones del esquema deben incrementar versión y aportar una migración y su prueba.
+El esquema inicial 1 conserva la configuración; el esquema 2 añade una moneda explícita `EUR` a `PayRule`. `MIGRATION_2_3` crea únicamente las dos tablas de planificación y sus índices. `MIGRATION_3_4` añade `isExtra` por intervalo con valor inicial false, sin inferir extras en turnos antiguos. Se conservan las migraciones y los cuatro esquemas; no hay `fallbackToDestructiveMigration`. Las rutas 1→4, 2→4 y 3→4 tienen pruebas de conservación de configuración y turnos existentes.
 
 ## Privacidad
 
@@ -89,4 +105,6 @@ powershell -NoProfile -File .\scripts\verify-restart.ps1
 
 Si el SDK está en otra ubicación, pasa `-AdbPath C:/ruta/al/Sdk/platform-tools/adb.exe`. El script verifica las dos fases instrumentadas, detiene y relanza únicamente `com.turnocontrol.verification`, y exige un PID diferente con perfil, contrato y cinco tarifas conservados. No debe ejecutarse sobre el paquete privado del usuario.
 
-La implementación se detiene en Fase 1.1. Alcance, pruebas, validación manual comunicada por el usuario y cierre local: [docs/FASE_1_1.md](docs/FASE_1_1.md). Continuar a Fase 1.2 requiere autorización; no se han preparado acciones de publicación o distribución en Google Play.
+El cierre previo y la validación manual del OCR comunicada por el usuario están en [docs/FASE_1_1.md](docs/FASE_1_1.md). La base de interpretación reutilizada se describe en [docs/FASE_1_2.md](docs/FASE_1_2.md) y el primer calendario persistente en [docs/CALENDARIO.md](docs/CALENDARIO.md). El estado actual, Room 4, rueda, extras y pasos de prueba están en [docs/REDISENO_INTERFAZ.md](docs/REDISENO_INTERFAZ.md). No se ha creado ningún commit nuevo; la revisión del usuario sigue pendiente.
+
+La corrección posterior de importación de tablas semanales, selección de fila, anotaciones y vacaciones no guardables se documenta en [docs/CORRECCION_OCR_TABLAS.md](docs/CORRECCION_OCR_TABLAS.md). No cambia Room 4 ni clasifica extras automáticamente.

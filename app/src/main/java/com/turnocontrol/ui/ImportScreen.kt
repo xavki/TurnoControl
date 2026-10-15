@@ -16,13 +16,14 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.turnocontrol.domain.OcrDocument
 
 @Composable
-fun ImportScreen(model: ImportViewModel, back: () -> Unit) {
+fun ImportScreen(model: ImportViewModel, onSourceChanged: () -> Unit, review: (OcrDocument) -> Unit, back: () -> Unit) {
     val state by model.state.collectAsStateWithLifecycle()
     var pickerError by remember { mutableStateOf<String?>(null) }
-    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia(), model::select)
-    val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument(), model::select)
+    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) onSourceChanged(); model.select(uri) }
+    val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) onSourceChanged(); model.select(uri) }
     fun launchPicker(action: () -> Unit) {
         pickerError = null
         try { action() }
@@ -31,7 +32,7 @@ fun ImportScreen(model: ImportViewModel, back: () -> Unit) {
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Importar imagen · OCR", style = MaterialTheme.typography.headlineSmall)
-        Text("Selecciona una imagen, incluidas las guardadas desde WhatsApp. El reconocimiento se realiza en este dispositivo; no interpreta horarios ni guarda turnos.")
+        Text("Selecciona una imagen, incluidas las guardadas desde WhatsApp. El reconocimiento se realiza en este dispositivo. Los turnos son propuestas: solo se guardan después de revisarlos y confirmarlos.")
         Button(enabled = !state.loading, onClick = { launchPicker { gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) } }) { Text("Seleccionar de galería") }
         OutlinedButton(enabled = !state.loading, onClick = { launchPicker { files.launch(arrayOf("image/*")) } }) { Text("Seleccionar archivo") }
         Text("Usa una imagen guardada en el dispositivo. Un proveedor de archivos en la nube puede descargarla al seleccionarla. TurnoControl no tiene acceso a Internet.")
@@ -48,10 +49,11 @@ fun ImportScreen(model: ImportViewModel, back: () -> Unit) {
             Text("Texto reconocido", style = MaterialTheme.typography.titleMedium)
             if (document.text.isNotBlank()) SelectionContainer { Text(document.text) }
             Text("${document.blocks.size} bloques · ${document.blocks.sumOf { it.children.size }} líneas. Coordenadas conservadas respecto a la vista previa.")
-            Text("El OCR puede contener errores. Revisa el texto; no se han identificado personas ni creado turnos.")
+            Text("El OCR puede contener errores. Revisa el texto antes de interpretar únicamente al trabajador elegido.")
+            if (document.text.isNotBlank()) Button(onClick = { review(document) }) { Text("Revisar turnos del trabajador") }
         }
         if (state.loading || state.image != null || state.document != null) {
-            OutlinedButton(onClick = { pickerError = null; model.clear() }) { Text(if (state.loading) "Cancelar reconocimiento" else "Descartar imagen y texto") }
+            OutlinedButton(onClick = { pickerError = null; onSourceChanged(); model.clear() }) { Text(if (state.loading) "Cancelar reconocimiento" else "Descartar imagen y texto") }
         }
         Text("La imagen y el resultado son temporales: se pierden al cerrar el proceso de la aplicación.")
         TextButton(onClick = back) { Text("Volver al calendario") }

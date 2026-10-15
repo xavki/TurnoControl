@@ -32,4 +32,4 @@ $launch = Invoke-Adb @('shell', 'am', 'start', '-W', '-n', "$package/com.turnoco
 Write-Output $launch
 if ($launch -notmatch 'Status: ok') { throw 'Isolated app failed to restart' }
 Invoke-RestartPhase 'verify'
-Write-Output 'PASS: profile, contract and five rates preserved across a real process restart.'
+Write-Output 'PASS: profile, contract, five rates, split and overnight scheduled shifts with explicit extra classification preserved across a real process restart.'

@@ -12,11 +12,13 @@ class NavigationTest {
 
     @Test fun navigationConfigurationAndThemeSurviveRecreation() {
         compose.waitUntil(10000) {
-            runCatching { compose.onAllNodes(hasText("TurnoControl · Inicio")).fetchSemanticsNodes().isNotEmpty() }.getOrDefault(false)
+            runCatching { compose.onAllNodes(hasText("Hoy")).fetchSemanticsNodes().isNotEmpty() }.getOrDefault(false)
         }
-        listOf("Calendario", "Fichajes", "Nómina", "Ajustes", "Inicio").forEach {
+        listOf("Horas extras", "Nómina", "Ajustes", "Calendario").forEach {
             compose.onNodeWithText(it).performClick()
-            compose.onNodeWithText("TurnoControl · $it").assertIsDisplayed()
+            if (it == "Calendario") compose.onNodeWithText("Hoy").assertExists()
+            else if (it == "Horas extras") compose.onNodeWithText("Todavía no hay intervalos marcados como extras.").assertExists()
+            else compose.onNodeWithText("TurnoControl · $it").assertIsDisplayed()
         }
         compose.onNodeWithText("Ajustes").performClick()
         // Replacing makes this test repeatable after the isolated restart fixture has run.
@@ -27,8 +29,8 @@ class NavigationTest {
         compose.waitUntil(5000) {
             compose.onAllNodes(hasText("Configuración guardada en este dispositivo.")).fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("Inicio").performClick()
-        compose.onNodeWithText("Perfil local configurado. Aún no hay actividad registrada.").assertIsDisplayed()
+        compose.onNodeWithText("Calendario").performClick()
+        compose.onNodeWithText("Hoy").assertExists()
         compose.onNodeWithText("Ajustes").performClick()
         compose.onNodeWithContentDescription("Tema oscuro").performScrollTo()
         if (compose.onNodeWithContentDescription("Tema oscuro").fetchSemanticsNode().config[SemanticsProperties.ToggleableState] == ToggleableState.Off) {

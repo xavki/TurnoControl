@@ -22,7 +22,7 @@ class RoomTest {
     private val profile = Profile(displayName = "Perfil ficticio", alias = "", zoneId = "UTC")
     private val contract = Contract(type = "PARTIAL", agreedMinutes = 3600, unit = "MONTH", validFrom = "2026-01-01")
     private val rate = PayRule(type = "HOURLY_BASE", amountDecimal = "7.17", mode = "BASE", accumulation = "UNDEFINED", validFrom = "2026-01-01")
-    private fun open(name: String) = Room.databaseBuilder(context, TurnoDatabase::class.java, name).addMigrations(MIGRATION_1_2).allowMainThreadQueries().build()
+    private fun open(name: String) = Room.databaseBuilder(context, TurnoDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).allowMainThreadQueries().build()
 
     @Test fun configurationSurvivesReopeningAndClearsRates() = runTest {
         val name = "roundtrip.db"
