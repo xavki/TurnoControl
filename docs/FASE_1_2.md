@@ -1,8 +1,10 @@
 # Fase 1.2: interpretación y revisión provisional
 
-> Registro de la implementación inicial, anterior al rediseño autorizado. Las referencias de este documento a ausencia de persistencia, Room sin cambios y falta de autorización ADB describen aquella validación. El estado actual del calendario, Room 3 y las comprobaciones posteriores se documentan en [CALENDARIO.md](CALENDARIO.md).
+> Contexto del cierre local de v0.1.0 (15/10/2026): este informe conserva las condiciones, fechas y resultados de su etapa. Las menciones a trabajo sin commit o revisiones pendientes describen ese momento; el trabajo acumulado ya está consolidado en la base pública saneada `d76842e727cdca4f853531b5ee7995a151a94867`. Los hashes de base se refieren al historial saneado. La preparación actual se documenta en [PREPARACION_V0_1_0.md](PREPARACION_V0_1_0.md).
 
-Base: `dbc65171ad7ca242289b28c35473ce1398c39e27`. Implementación pendiente de revisión; sin commit, push, merge ni publicación. No se implementa Fase 1.3.
+> Registro de la implementación inicial, anterior al rediseño autorizado. Las referencias de este documento a ausencia de persistencia, Room sin cambios y falta de autorización ADB describen aquella validación. La etapa de Room 3 se documenta en [CALENDARIO.md](CALENDARIO.md) y el rediseño posterior con Room 4 en [REDISENO_INTERFAZ.md](REDISENO_INTERFAZ.md).
+
+Base: `28861ff3fe4ce4382f07e2b2d973c3dce1fc674f`. Implementación pendiente de revisión; sin commit, push, merge ni publicación. No se implementa Fase 1.3.
 
 ## Uso y arquitectura
 

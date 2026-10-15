@@ -1,8 +1,10 @@
 # Rediseño autorizado: calendario y planificación persistente
 
+> Contexto del cierre local de v0.1.0 (15/10/2026): este informe conserva las condiciones, fechas y resultados de su etapa. Las menciones a trabajo sin commit o revisiones pendientes describen ese momento; el trabajo acumulado ya está consolidado en la base pública saneada `d76842e727cdca4f853531b5ee7995a151a94867`. Los hashes de base se refieren al historial saneado. La preparación actual se documenta en [PREPARACION_V0_1_0.md](PREPARACION_V0_1_0.md).
+
 > Registro del primer calendario persistente con Room 3. El rediseño visual posterior, la rueda y Room 4 se documentan en [REDISENO_INTERFAZ.md](REDISENO_INTERFAZ.md); las pantallas y resultados descritos aquí corresponden a la validación anterior.
 
-Base estable: `dbc65171ad7ca242289b28c35473ce1398c39e27`. Se conserva el trabajo pendiente de interpretación de Fase 1.2. Implementación del calendario, almacenamiento y migración 2→3 autorizada por el usuario; sin commit, push, merge ni publicación. Fecha de validación: 13 de octubre de 2026.
+Base estable: `28861ff3fe4ce4382f07e2b2d973c3dce1fc674f`. Se conserva el trabajo pendiente de interpretación de Fase 1.2. Implementación del calendario, almacenamiento y migración 2→3 autorizada por el usuario; sin commit, push, merge ni publicación. Fecha de validación: 13 de octubre de 2026.
 
 ## Flujo funcional
 

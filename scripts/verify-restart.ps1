@@ -1,8 +1,31 @@
+<#
+.SYNOPSIS
+Verifies persistence across a process restart using synthetic data only.
+.DESCRIPTION
+Build assembleVerification assembleVerificationAndroidTest first. Requires one
+authorized, unlocked Android device. Installs only com.turnocontrol.verification
+and its test APK; replaces that isolated variant's calendar with synthetic fixtures.
+Never targets com.turnocontrol. Run from any directory.
+ADB discovery: explicit -AdbPath, ANDROID_HOME, ANDROID_SDK_ROOT, PATH, local SDK.
+.EXAMPLE
+pwsh -File ./scripts/verify-restart.ps1 -AdbPath /path/to/Android/Sdk/platform-tools/adb
+#>
 param([string]$AdbPath = "")
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 if (-not $AdbPath) {
-    $AdbPath = Join-Path $projectRoot '.tools/android-sdk/platform-tools/adb.exe'
+    $adbName = if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) { 'adb.exe' } else { 'adb' }
+    $candidates = @()
+    foreach ($sdkRoot in @($env:ANDROID_HOME, $env:ANDROID_SDK_ROOT)) {
+        if ($sdkRoot) { $candidates += Join-Path $sdkRoot "platform-tools/$adbName" }
+    }
+    $fromPath = Get-Command $adbName -ErrorAction SilentlyContinue
+    if ($fromPath) { $candidates += $fromPath.Source }
+    $candidates += Join-Path $projectRoot ".tools/android-sdk/platform-tools/$adbName"
+    $AdbPath = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+}
+if (-not $AdbPath -or -not (Test-Path -LiteralPath $AdbPath -PathType Leaf)) {
+    throw 'ADB not found. Set ANDROID_HOME or pass -AdbPath pointing to platform-tools/adb.'
 }
 function Invoke-Adb([string[]]$Arguments) {
     $result = & $AdbPath @Arguments 2>&1
@@ -10,6 +33,8 @@ function Invoke-Adb([string[]]$Arguments) {
     return ($result -join "`n")
 }
 $package = 'com.turnocontrol.verification'
+$devices = @((Invoke-Adb @('devices')) -split "`r?`n" | Where-Object { $_ -match '\s+device\s*$' })
+if ($devices.Count -ne 1) { throw 'Exactly one authorized Android device is required. Check adb devices and USB authorization.' }
 $runner = "$package.test/androidx.test.runner.AndroidJUnitRunner"
 $test = 'com.turnocontrol.data.RestartPersistenceTest#repositoryConfigurationSurvivesRestart'
 $targetApk = Join-Path $projectRoot 'app/build/outputs/apk/verification/app-verification.apk'

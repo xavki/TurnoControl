@@ -1,110 +1,128 @@
 # TurnoControl
 
-Aplicación Android nativa centrada en un calendario mensual/semanal de turnos programados. Detalle por día, editor normal/partido con rueda de horas y minutos, clasificación extra por intervalo y guardado local sin exigir contrato ni tarifas. Cuatro pestañas: Calendario, Horas extras, Nómina y Ajustes. La fotografía es una entrada alternativa desde Ajustes → Importar horario: OCR local → trabajador → revisión → conflictos → confirmación explícita. No incluye documentos PDF, notificaciones, fichajes reales ni cálculo de nómina. El rediseño está pendiente de revisión visual y funcional y no tiene commit.
+Aplicación Android nativa para organizar turnos programados en un calendario. Permite introducirlos manualmente o preparar propuestas desde una fotografía mediante OCR local, revisarlas y confirmar su guardado.
 
-## Compilar y verificar
+**Versión 0.1.0 — versión inicial en desarrollo.** Proyecto de portfolio, sin publicación de producción. No registra horas realmente trabajadas ni calcula nóminas.
 
-Requisitos: JDK 17, Android SDK con `platforms;android-35`, `build-tools;35.0.0` y `platform-tools`. El Gradle Wrapper usa Gradle 8.11.1. Las dependencias iniciales requieren conexión; la aplicación no necesita servidor.
+## Funcionalidades
 
-Configura `ANDROID_HOME` o crea `local.properties` (ignorado por Git):
+- Calendario mensual y semanal, navegación entre meses/años y acceso a Hoy.
+- Días de trabajo, libres y sin configurar; detalle, edición y eliminación.
+- Turnos normales y partidos, con precisión de minutos y cruces de medianoche. Las continuaciones pertenecen al día de inicio y no duplican registros.
+- Extras declaradas por intervalo, incluidas en el total programado y mostradas también como subtotal. Los descansos entre intervalos no cuentan como trabajo.
+- Persistencia local sin exigir contrato ni tarifas para usar el calendario.
+- Photo Picker y selector de archivos Android, vista previa y ML Kit local.
+- Interpretación de tablas con trabajadores en filas y fechas en columnas. Coincidencia exacta y selección explícita mediante lista o sobre la fotografía.
+- Revisión y corrección manual antes de guardar, resolución de conflictos sin sobrescritura silenciosa y comprobación transaccional de cambios concurrentes.
+- Configuración opcional de perfil, contrato y cinco tarifas, sin motor salarial; tema claro/oscuro persistente.
 
-```properties
-sdk.dir=C:/ruta/al/Android/Sdk
-```
+## Tecnologías y arquitectura
 
-Desde la raíz, en Windows:
+Kotlin, Jetpack Compose, Material 3, Navigation Compose, MVVM, StateFlow, coroutines, Hilt, Room, DataStore y Google ML Kit Text Recognition con modelo incluido.
 
-```powershell
-.\gradlew.bat --no-daemon assembleDebug lintDebug testDebugUnitTest
-.\gradlew.bat --no-daemon connectedVerificationAndroidTest
-.\gradlew.bat --no-daemon installDebug
-```
-
-En Bash, utiliza `./gradlew` con los mismos argumentos. `--no-daemon` evita reutilizar un daemon iniciado con un entorno o permisos diferentes. Las pruebas conectadas requieren un dispositivo o emulador con Android 8 o superior, depuración USB autorizada y pantalla desbloqueada.
-
-El SDK utilizado durante esta ejecución está en `.tools/android-sdk`, excluido del control de versiones. Para preparar otro entorno, usa el SDK Manager de Android Studio o las herramientas oficiales y acepta sus licencias de forma explícita.
-
-APK privado: `app/build/outputs/apk/debug/app-debug.apk`. Está firmado con la clave de depuración local, no con una clave de distribución. La compilación de prueba `verification` usa `com.turnocontrol.verification` para aislar sus datos del APK privado `com.turnocontrol`.
-
-## Estructura
-
-Un solo módulo `app`, sin módulos de dominio o datos separados:
+Un módulo `app` con separación por responsabilidad:
 
 ```text
-gradle/libs.versions.toml                 Plugins y dependencias principales fijados
-app/src/main/AndroidManifest.xml         Aplicación sin permisos de red o almacenamiento general
 app/src/main/java/com/turnocontrol/
-  TurnoApplication.kt                    Inicio de Hilt
-  MainActivity.kt                        Compose, Material 3 y Navigation
-  ui/ConfigurationViewModel.kt           Estado, validación y operaciones asíncronas
-  domain/Configuration.kt                Borrador de configuración y validación decimal
-  data/Database.kt                       Entidades, DAO y migración
-  data/ConfigurationRepository.kt        Room y preferencias DataStore
-  di/StorageModule.kt                    Provisión singleton de Room
-  ui/ImportScreen.kt                     Selectores Android, vista previa y texto
-  ui/ImportViewModel.kt                  Estado temporal y cancelación de importación
-  data/ImageOcr.kt                       Decodificación acotada y ML Kit local
-  domain/OcrDocument.kt                  Bloques, líneas, elementos y geometría
-  di/OcrModule.kt                        Inyección del servicio OCR
-  domain/ScheduleInterpretation.kt       Resultados provisionales y parser horario estricto
-  domain/WorkerRowsInterpreter.kt        Reconstrucción geométrica independiente de Android
-  domain/WeeklyReportInterpreter.kt      Siete fechas, filas multilínea y perspectiva
-  domain/ReportCellParser.kt             Anotaciones admitidas, LIB y VAC provisional
-  ui/ScheduleReviewViewModel.kt          Interpretación y correcciones temporales
-  ui/ScheduleReviewScreen.kt             Revisión del trabajador y sus días
-  ui/OcrRowSelector.kt                   Selección explícita sobre foto o lista de filas
-  di/ScheduleModule.kt                   Estrategia de interpretación mediante Hilt
-  domain/PlannedSchedule.kt              Validación de planificación y solapamientos
-  data/ScheduleStorage.kt                Tablas de días/intervalos, DAO y migraciones hasta 4
-  data/ScheduleRepository.kt             Guardado atómico y control de cambios concurrentes
-  ui/CalendarViewModel.kt                Calendario, editor y confirmación de propuestas
-  ui/CalendarScreen.kt                   Mes/Semana y confirmación de conflictos OCR
-  ui/DayDetailScreen.kt                  Detalle, edición por intervalo y estados del día
-  ui/TimeWheel.kt                        Ruedas Compose de horas/minutos y accesibilidad
-  ui/ExtrasScreen.kt                     Extras declaradas por fecha y subtotal
-app/schemas/                            Esquemas Room 1, 2, 3 y 4 exportados
-app/src/test/                           Validación y Room con Robolectric
-app/src/androidTest/                    Compose, persistencia y migración en Android
+  ui/       Pantallas Compose y ViewModels
+  domain/   Modelos, validación e intérpretes independientes de la interfaz
+  data/     Room, repositorios, preferencias y reconocimiento local
+  di/       Inyección mediante Hilt
+app/schemas/          Esquemas Room 1–4
+app/src/test/         JUnit y Robolectric
+app/src/androidTest/  Interfaz, OCR y persistencia en Android
+app/src/verification/ Soporte exclusivo de la variante aislada de pruebas
 ```
 
-MVVM: Compose observa `StateFlow` con el ciclo de vida; el ViewModel utiliza el repositorio, que guarda perfil, contrato y tarifas en una única transacción. Hilt proporciona la base y el repositorio. La validación es una función de dominio independiente; no hay motor salarial ni casos de uso vacíos.
+El OCR permanece provisional en memoria hasta confirmar los días. La planificación está separada de futuros fichajes reales. Las migraciones no destructivas preservan configuración y turnos existentes.
 
-## Configuración local
+## Capturas con datos ficticios
 
-- Perfil: nombre visible, alias opcional y zona horaria IANA.
-- Contrato: jornada parcial/completa, horas positivas, unidad semana/mes/año y fecha inicial ISO.
-- Cinco tarifas opcionales en EUR/h: base, prorrata, complementaria, plus nocturno y plus nocturno especial. Inicialmente están vacías; los ejemplos del documento no se precargan.
-- Tema claro/oscuro persistido con DataStore.
+Las imágenes proceden de la interfaz real de `verification`, con planificación sintética, sin fotografías laborales, identidades ni horarios personales. La fecha corresponde al mes de generación.
 
-Las horas se guardan como minutos enteros, las cantidades monetarias como cadenas decimales. Se acepta coma o punto decimal y no se usa `Double` para dinero. La configuración actual sustituye a la anterior; todavía no existe historial de vigencias ni selección de varios perfiles. La estructura incluye claves de perfil y campos de vigencia para ampliar estas funciones cuando se apruebe su fase.
+| Calendario | Detalle del día |
+| --- | --- |
+| ![Calendario ficticio](docs/screenshots/calendar.png) | ![Detalle ficticio](docs/screenshots/day-detail.png) |
+| Editor | Horas extras declaradas |
+| ![Editor ficticio](docs/screenshots/shift-editor.png) | ![Extras ficticias](docs/screenshots/extra-hours.png) |
 
-## Persistencia y evolución
+Generación y verificación: [preparación de v0.1.0](docs/PREPARACION_V0_1_0.md).
 
-Room contiene `Profile`, `Contract`, `PayRule`, `ScheduledDay` y `ScheduledInterval`. El calendario necesita únicamente un perfil mínimo local; no crea contratos ni tarifas. Los turnos confirmados se guardan separados del OCR provisional y de futuros fichajes reales. No se persisten imágenes ni el texto OCR completo.
+## Compilar desde un clon limpio
 
-El esquema inicial 1 conserva la configuración; el esquema 2 añade una moneda explícita `EUR` a `PayRule`. `MIGRATION_2_3` crea únicamente las dos tablas de planificación y sus índices. `MIGRATION_3_4` añade `isExtra` por intervalo con valor inicial false, sin inferir extras en turnos antiguos. Se conservan las migraciones y los cuatro esquemas; no hay `fallbackToDestructiveMigration`. Las rutas 1→4, 2→4 y 3→4 tienen pruebas de conservación de configuración y turnos existentes.
+Requisitos: JDK 17 y Android SDK con `platforms;android-35`, `build-tools;35.0.0` y `platform-tools`. El Wrapper incluido utiliza Gradle 8.11.1; no hace falta Gradle global. Android mínimo: 8.0 / API 26.
+
+Configura `JAVA_HOME` con tu JDK y `ANDROID_HOME` con tu SDK, o crea `local.properties` en la raíz (ignorado por Git):
+
+```properties
+sdk.dir=/ruta/al/Android/Sdk
+```
+
+En Windows puede usarse `sdk.dir=C:/ruta/al/Android/Sdk`. Instala los componentes y acepta sus licencias con Android Studio o las herramientas oficiales. La primera compilación necesita conexión para descargar Gradle y dependencias; no requiere secretos, cuentas ni servicios propios.
+
+Windows:
+
+```powershell
+.\gradlew.bat --no-daemon --max-workers=1 assembleDebug testDebugUnitTest lintDebug lintVerification assembleVerificationAndroidTest
+```
+
+Linux/macOS:
+
+```bash
+./gradlew --no-daemon --max-workers=1 assembleDebug testDebugUnitTest lintDebug lintVerification assembleVerificationAndroidTest
+```
+
+APK: `app/build/outputs/apk/debug/app-debug.apk`, firmado con la clave de depuración de tu entorno. No se versionan APK ni claves. Un worker evita una carrera lint/kapt observada durante el desarrollo.
+
+## Pruebas
+
+Con un dispositivo o emulador autorizado y desbloqueado:
+
+```bash
+./gradlew --no-daemon --max-workers=1 connectedVerificationAndroidTest
+```
+
+En Windows sustituye `./gradlew` por `.\gradlew.bat`. Las pruebas usan `com.turnocontrol.verification`, separado de `com.turnocontrol`. Algunas sustituyen datos de la variante aislada por fixtures sintéticas: no deben redirigirse al paquete privado.
+
+Para comprobar un reinicio real, compila `assembleVerification assembleVerificationAndroidTest` y ejecuta:
+
+```powershell
+pwsh -File ./scripts/verify-restart.ps1 -AdbPath /ruta/al/Android/Sdk/platform-tools/adb
+```
+
+En Windows también sirve Windows PowerShell y la ruta a `adb.exe`. Sin `-AdbPath`, se busca en `ANDROID_HOME`, `ANDROID_SDK_ROOT`, PATH y finalmente `.tools/android-sdk`. Requiere exactamente un dispositivo autorizado. Instala solo los APK aislados y verifica perfil, contrato, cinco tarifas, partidos, nocturnos y extras con PID distinto.
+
+La preparación del 15/10/2026 registró **69 tests locales y 19 Android aprobados**, compilación correcta y lint sin errores, con 43/47 advertencias de mantenimiento. La prueba manual OCR del 15/10/2026 fue aprobada por el usuario para el formato probado. Resultados, incidencias y límites de la verificación: [PREPARACION_V0_1_0.md](docs/PREPARACION_V0_1_0.md).
+
+Se prueban migraciones 1→4, 2→4 y 3→4, conservación de configuración, edición/eliminación, medianoche, extras, conflictos y regresión OCR. Las imágenes se generan con Canvas y datos ficticios; las respuestas de los selectores se simulan con Espresso Intents.
 
 ## Privacidad
 
-Datos en almacenamiento privado de Android, sin cuentas ni backend. Copia automática y transferencia de datos desactivadas mediante manifiesto y reglas de extracción. No se incorporan documentos, imágenes, alias reales, identificadores del dispositivo ni nóminas a las fuentes o fixtures. No se afirma cifrado propio ni protección contra un dispositivo comprometido.
+- Sin cuentas ni backend; el manifiesto elimina permisos de Internet y estado de red.
+- Sin permisos generales de almacenamiento: se utilizan URI de los selectores. Un proveedor externo puede descargar un archivo antes de entregarlo a la aplicación.
+- Fotografías y documentos OCR completos no se persisten; el estado provisional se pierde al terminar el proceso.
+- Datos en almacenamiento privado de Android; backup automático y transferencia desactivados.
+- No se afirma cifrado adicional de la base de datos ni protección frente a un dispositivo comprometido.
 
-`.gitignore` excluye SDK local, builds, informes, cachés, `local.properties`, documentos PDF/DOCX y claves de firma. Los informes generados por las herramientas pueden contener rutas locales e identificadores del equipo o dispositivo: permanecen en `app/build/`, nunca deben incorporarse al control de versiones.
+## Limitaciones
 
-## Pruebas y revisión
+- OCR sensible a perspectiva extrema, texto pequeño, desenfoque y geometría incompleta. No se adivinan horas ni fechas. Límite: 2048 píxeles por lado y 20 MiB por imagen.
+- La estrategia semanal requiere siete fechas completas; la estrategia inicial admite otros diseños. No hay coincidencia aproximada automática de identidad.
+- `LIB` es libre; `VAC` es ausencia provisional no guardable en Room 4. Celdas ambiguas requieren corrección. El OCR no infiere extras por colores o anotaciones.
+- Precisión de minutos, desplazamientos de 0/1 día y máximo técnico de 24 horas por intervalo y sumadas por día de inicio; no son reglas laborales.
+- Totales nominales de planificación, sin resolver automáticamente cambios de horario de verano. Sin fichajes, notificaciones, PDF ni cálculos salariales.
+- Un perfil local, sin sincronización ni historial de vigencias de configuración.
+- Cobertura manual limitada al formato probado y Samsung A53; pendiente una matriz de dispositivos y evaluación completa de accesibilidad.
 
-Los tests locales comprueban validación, reapertura de Room, eliminación de tarifas opcionales, atomicidad ante una clave foránea inválida y migración del esquema exportado. Los instrumentados comprueban navegación, guardado mediante el formulario, recreación de Activity, preferencia de tema, persistencia en disco y migración con `MigrationTestHelper`.
+## Estado y documentación
 
-Resultados, incidencias del entorno y preguntas pendientes: [docs/FASE_0.md](docs/FASE_0.md).
+La versión inicial reúne calendario persistente, Room 4, rediseño e importación OCR revisada. Los informes históricos conservan el contexto de sus validaciones; las referencias a revisiones pendientes describen aquellas etapas.
 
-La revisión posterior de cierre, incluyendo advertencias de lint y resultados de las verificaciones locales y Android, está en [docs/CIERRE_FASE_0.md](docs/CIERRE_FASE_0.md). Para comprobar un reinicio de proceso con datos ficticios en la variante aislada:
+- [Corrección OCR y aprobación manual](docs/CORRECCION_OCR_TABLAS.md)
+- [Calendario y persistencia](docs/CALENDARIO.md)
+- [Rediseño y Room 4](docs/REDISENO_INTERFAZ.md)
+- [Preparación y cierre local de v0.1.0](docs/PREPARACION_V0_1_0.md)
 
-```powershell
-.\gradlew.bat --no-daemon assembleVerification assembleVerificationAndroidTest
-powershell -NoProfile -File .\scripts\verify-restart.ps1
-```
+## Licencia
 
-Si el SDK está en otra ubicación, pasa `-AdbPath C:/ruta/al/Sdk/platform-tools/adb.exe`. El script verifica las dos fases instrumentadas, detiene y relanza únicamente `com.turnocontrol.verification`, y exige un PID diferente con perfil, contrato y cinco tarifas conservados. No debe ejecutarse sobre el paquete privado del usuario.
-
-El cierre previo y la validación manual del OCR comunicada por el usuario están en [docs/FASE_1_1.md](docs/FASE_1_1.md). La base de interpretación reutilizada se describe en [docs/FASE_1_2.md](docs/FASE_1_2.md) y el primer calendario persistente en [docs/CALENDARIO.md](docs/CALENDARIO.md). El estado actual, Room 4, rueda, extras y pasos de prueba están en [docs/REDISENO_INTERFAZ.md](docs/REDISENO_INTERFAZ.md). No se ha creado ningún commit nuevo; la revisión del usuario sigue pendiente.
-
-La corrección posterior de importación de tablas semanales, selección de fila, anotaciones y vacaciones no guardables se documenta en [docs/CORRECCION_OCR_TABLAS.md](docs/CORRECCION_OCR_TABLAS.md). No cambia Room 4 ni clasifica extras automáticamente.
+El código propio de TurnoControl está bajo la [licencia MIT](LICENSE). Copyright (c) 2026 TurnoControl. Las dependencias y el Gradle Wrapper conservan sus licencias y condiciones propias; véase la revisión de terceros en [PREPARACION_V0_1_0.md](docs/PREPARACION_V0_1_0.md).

@@ -1,6 +1,8 @@
-# Rediseño visual y horas extras declaradas — pendiente de revisión
+# Rediseño visual y horas extras declaradas — registro histórico
 
-Base estable: `dbc65171ad7ca242289b28c35473ce1398c39e27`. Se conservan los cambios pendientes de OCR, interpretación y calendario persistente. El usuario autorizó este rediseño y expresamente Room 3→4. No se crea commit, push, merge ni publicación. La aceptación visual y funcional por el usuario sigue pendiente.
+> Contexto del cierre local de v0.1.0 (15/10/2026): este informe conserva las condiciones, fechas y resultados de su etapa. Las menciones a trabajo sin commit o revisiones pendientes describen ese momento; el trabajo acumulado ya está consolidado en la base pública saneada `d76842e727cdca4f853531b5ee7995a151a94867`. Los hashes de base se refieren al historial saneado. La preparación actual se documenta en [PREPARACION_V0_1_0.md](PREPARACION_V0_1_0.md).
+
+Base estable: `28861ff3fe4ce4382f07e2b2d973c3dce1fc674f`. Se conservan los cambios pendientes de OCR, interpretación y calendario persistente. El usuario autorizó este rediseño y expresamente Room 3→4. No se crea commit, push, merge ni publicación. La aceptación visual y funcional por el usuario sigue pendiente.
 
 ## Pantallas y navegación
 

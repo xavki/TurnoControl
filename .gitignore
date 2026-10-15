@@ -19,3 +19,23 @@ captures/
 *.db
 *.db-*
 *.sqlite*
+*.apk
+*.aab
+*.apks
+*.tmp
+*.temp
+*.log
+*.bak
+*.swp
+*~
+.DS_Store
+Thumbs.db
+private/
+*.bundle
+# Photos are private by default; only reviewed synthetic portfolio PNGs are allowed.
+*.jpg
+*.jpeg
+*.heic
+*.webp
+*.png
+!docs/screenshots/*.png

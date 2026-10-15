@@ -1,6 +1,8 @@
 # Fase 1.1: importación de imágenes y OCR local
 
-Base: `a02e0bb24d27f52be0147cda53d8661ec4d43fa5`. Cierre de Fase 1.1 mediante un único commit local, con validación automatizada y validación manual comunicada por el usuario. Sin push, merge o publicación. No se implementa Fase 1.2.
+> Contexto del cierre local de v0.1.0 (15/10/2026): este informe conserva las condiciones, fechas y resultados de su etapa. Las menciones a trabajo sin commit o revisiones pendientes describen ese momento; el trabajo acumulado ya está consolidado en la base pública saneada `d76842e727cdca4f853531b5ee7995a151a94867`. Los hashes de base se refieren al historial saneado. La preparación actual se documenta en [PREPARACION_V0_1_0.md](PREPARACION_V0_1_0.md).
+
+Base: `6b0b4316c9263a98b882886a7b7ec8d863bd8318`. Cierre de Fase 1.1 mediante un único commit local, con validación automatizada y validación manual comunicada por el usuario. Sin push, merge o publicación. No se implementa Fase 1.2.
 
 ## Alcance y arquitectura
 
