@@ -2,6 +2,8 @@ package com.turnocontrol.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,15 +24,18 @@ fun TimeWheel(title: String, initial: LocalTime?, cancel: () -> Unit, confirm: (
     var hour by remember { mutableIntStateOf(initial?.hour ?: 0) }
     var minute by remember { mutableIntStateOf(initial?.minute ?: 0) }
     AlertDialog(onDismissRequest = cancel, title = { Text(title) }, text = {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(String.format(Locale.ROOT, "%02d:%02d", hour, minute), style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        Column(Modifier.verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.medium) {
+                Text(String.format(Locale.ROOT, "%02d:%02d", hour, minute), style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp).semantics { liveRegion = LiveRegionMode.Polite })
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                 WheelColumn("Hora", 24, hour) { hour = it }
                 WheelColumn("Minuto", 60, minute) { minute = it }
             }
         }
-    }, confirmButton = { TextButton(onClick = { confirm(LocalTime.of(hour, minute)) }) { Text("Confirmar hora") } },
+    }, confirmButton = { Button(onClick = { confirm(LocalTime.of(hour, minute)) }) { Text("Confirmar hora") } },
         dismissButton = { TextButton(onClick = cancel) { Text("Cancelar hora") } })
 }
 
@@ -49,7 +54,7 @@ private fun WheelColumn(label: String, count: Int, initial: Int, change: (Int) -
     }
     LaunchedEffect(selected) { change(selected) }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = MaterialTheme.typography.labelLarge)
+        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(state = state, flingBehavior = rememberSnapFlingBehavior(state), modifier = Modifier.width(88.dp).height(240.dp)
             .semantics { contentDescription = "Rueda $label"; stateDescription = selected.toString(); customActions = listOf(
                 CustomAccessibilityAction("Aumentar $label") { scope.launch { state.animateScrollToItem((selected + 1).coerceAtMost(count - 1)) }; true },
@@ -57,10 +62,11 @@ private fun WheelColumn(label: String, count: Int, initial: Int, change: (Int) -
             items((0 until count + 4).toList()) { index ->
                 val value = index - 2
                 Box(Modifier.fillMaxWidth().height(48.dp), contentAlignment = Alignment.Center) {
-                    if (value in 0 until count) Surface(color = if (value == selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
+                    if (value in 0 until count) Surface(color = if (value == selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
                         shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxSize().clickable { scope.launch { state.animateScrollToItem(value) } }
                             .semantics { contentDescription = "$label ${String.format(Locale.ROOT, "%02d", value)}"; this.selected = value == selected }) {
-                        Box(contentAlignment = Alignment.Center) { Text(String.format(Locale.ROOT, "%02d", value), style = if (value == selected) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge) }
+                        Box(contentAlignment = Alignment.Center) { Text(String.format(Locale.ROOT, "%02d", value), style = if (value == selected) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyLarge,
+                            color = if (value == selected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
             }

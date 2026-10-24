@@ -23,12 +23,13 @@ import java.util.Locale
 fun CalendarScreen(model: CalendarViewModel, openDay: () -> Unit) {
     val state by model.state.collectAsStateWithLifecycle()
     val spanish = Locale.forLanguageTag("es")
-    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Calendario", style = MaterialTheme.typography.headlineSmall)
         Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            TextButton(onClick = { model.move(-1) }, modifier = Modifier.semantics { contentDescription = if (state.week) "Semana anterior" else "Mes anterior" }) { Text("‹", style = MaterialTheme.typography.headlineMedium) }
+            IconButton(onClick = { model.move(-1) }, modifier = Modifier.semantics { contentDescription = if (state.week) "Semana anterior" else "Mes anterior" }) { Text("‹", style = MaterialTheme.typography.headlineMedium) }
             Text(if (state.week) "${model.weekStart().format(DateTimeFormatter.ofPattern("d MMM yyyy", spanish))} – ${model.weekStart().plusDays(6).format(DateTimeFormatter.ofPattern("d MMM yyyy", spanish))}" else state.month.format(DateTimeFormatter.ofPattern("MMMM yyyy", spanish)),
-                style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            TextButton(onClick = { model.move(1) }, modifier = Modifier.semantics { contentDescription = if (state.week) "Semana siguiente" else "Mes siguiente" }) { Text("›", style = MaterialTheme.typography.headlineMedium) }
+                style = if (state.week) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.weight(1f))
+            IconButton(onClick = { model.move(1) }, modifier = Modifier.semantics { contentDescription = if (state.week) "Semana siguiente" else "Mes siguiente" }) { Text("›", style = MaterialTheme.typography.headlineMedium) }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -39,11 +40,12 @@ fun CalendarScreen(model: CalendarViewModel, openDay: () -> Unit) {
         }
         if (state.loading || state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         CalendarRecoveryActions(model, state)
-        Row { listOf("L", "M", "X", "J", "V", "S", "D").forEach { Text(it, Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.labelMedium) } }
+        Row { listOf("L", "M", "X", "J", "V", "S", "D").forEach { Text(it, Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
         val first = if (state.week) model.weekStart() else state.month.atDay(1).minusDays((state.month.atDay(1).dayOfWeek.value - 1).toLong())
         val weeks = if (state.week) 1 else ((state.month.atDay(1).dayOfWeek.value - 1 + state.month.lengthOfMonth() + 6) / 7)
         BoxWithConstraints(Modifier.weight(1f)) {
-        val rowHeight = maxOf(48.dp, (maxHeight - 4.dp * (weeks - 1)) / weeks)
+        val availableRowHeight = maxOf(48.dp, (maxHeight - 4.dp * (weeks - 1)) / weeks)
+        val rowHeight = if (state.week) minOf(144.dp, availableRowHeight) else availableRowHeight
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             repeat(weeks) { week ->
                 Row(Modifier.height(rowHeight).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -58,20 +60,21 @@ fun CalendarScreen(model: CalendarViewModel, openDay: () -> Unit) {
                         val today = date == LocalDate.now()
                         val chosen = date == state.focused
                         Surface(onClick = { model.select(date); openDay() }, enabled = !state.busy && !state.loading,
-                            shape = MaterialTheme.shapes.medium,
-                            color = if (chosen) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
-                            border = if (today) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+                            shape = MaterialTheme.shapes.small,
+                            color = if (chosen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLowest,
+                            border = if (today) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
                             modifier = Modifier.weight(1f).fillMaxHeight().heightIn(min = 48.dp).semantics {
                                 contentDescription = "$date · $label${if (continues) " · Continuación nocturna" else ""}${if (today) " · Hoy" else ""}"
                                 selected = chosen
                             }) {
                             Column(Modifier.padding(vertical = 8.dp), horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                                 Text(date.dayOfMonth.toString(), style = MaterialTheme.typography.titleMedium,
-                                    color = if (!state.week && java.time.YearMonth.from(date) != state.month) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+                                    color = if (chosen) MaterialTheme.colorScheme.onPrimaryContainer else if (!state.week && java.time.YearMonth.from(date) != state.month) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
                                 if (own != null) Box(Modifier.padding(top = 6.dp).size(8.dp).then(
                                     if (own.day.kind == "WORK") Modifier.background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape)
                                     else Modifier.border(1.dp, MaterialTheme.colorScheme.tertiary, androidx.compose.foundation.shape.CircleShape)))
-                                if (continues) Text("↳", style = MaterialTheme.typography.labelMedium)
+                                if (own == null) Text("—", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                if (continues) Text("↳", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
@@ -79,6 +82,7 @@ fun CalendarScreen(model: CalendarViewModel, openDay: () -> Unit) {
             }
         }
         }
+        Text("● Trabajo   ○ Libre   — Sin configurar   ↳ Continuación", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         state.message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
     }
 }
