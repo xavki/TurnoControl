@@ -30,8 +30,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            val dark by model.darkTheme.collectAsStateWithLifecycle()
-            MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) { TurnoApp(model, importModel, reviewModel, calendarModel) }
+            val theme by model.theme.collectAsStateWithLifecycle()
+            MaterialTheme(colorScheme = if (theme.dark) darkColorScheme() else lightColorScheme()) { TurnoApp(model, importModel, reviewModel, calendarModel) }
         }
     }
 }
@@ -93,7 +93,7 @@ fun TurnoApp(model: ConfigurationViewModel, importModel: ImportViewModel, review
 private fun ConfigurationForm(state: ConfigurationState, model: ConfigurationViewModel) {
     if (state.loading) { CircularProgressIndicator(); return }
     val d = state.draft
-    val dark by model.darkTheme.collectAsStateWithLifecycle()
+    val theme by model.theme.collectAsStateWithLifecycle()
     Text("Perfil del trabajador", style = MaterialTheme.typography.titleMedium)
     @Composable fun field(label: String, value: String, change: (String) -> Unit) {
         OutlinedTextField(value, change, label = { Text(label) }, singleLine = true, enabled = !state.saving, modifier = Modifier.fillMaxWidth())
@@ -121,5 +121,10 @@ private fun ConfigurationForm(state: ConfigurationState, model: ConfigurationVie
     Button(onClick = model::save, enabled = !state.saving) { Text(if (state.saving) "Guardando…" else "Guardar configuración") }
     HorizontalDivider()
     Text("Apariencia", style = MaterialTheme.typography.titleMedium)
-    Row { Text("Tema oscuro", modifier = Modifier.weight(1f)); Switch(checked = dark, onCheckedChange = model::setDarkTheme, modifier = Modifier.semantics { contentDescription = "Tema oscuro" }) }
+    Row { Text("Tema oscuro", modifier = Modifier.weight(1f)); Switch(checked = theme.dark, onCheckedChange = model::setDarkTheme, enabled = !theme.loading && theme.error == null, modifier = Modifier.semantics { contentDescription = "Tema oscuro" }) }
+    if (theme.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+    theme.error?.let {
+        Text(it)
+        TextButton(onClick = model::retryThemeRead) { Text("Reintentar lectura de apariencia") }
+    }
 }

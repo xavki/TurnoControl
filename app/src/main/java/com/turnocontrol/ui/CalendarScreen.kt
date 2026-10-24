@@ -38,6 +38,7 @@ fun CalendarScreen(model: CalendarViewModel, openDay: () -> Unit) {
             TextButton(onClick = model::today) { Text("Hoy") }
         }
         if (state.loading || state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+        CalendarRecoveryActions(model, state)
         Row { listOf("L", "M", "X", "J", "V", "S", "D").forEach { Text(it, Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center, style = MaterialTheme.typography.labelMedium) } }
         val first = if (state.week) model.weekStart() else state.month.atDay(1).minusDays((state.month.atDay(1).dayOfWeek.value - 1).toLong())
         val weeks = if (state.week) 1 else ((state.month.atDay(1).dayOfWeek.value - 1 + state.month.lengthOfMonth() + 6) / 7)
@@ -82,14 +83,50 @@ fun CalendarScreen(model: CalendarViewModel, openDay: () -> Unit) {
     }
 }
 @Composable
+internal fun CalendarRecoveryActions(model: CalendarViewModel, state: CalendarState) {
+    state.observationError?.let {
+        Text(it, color = MaterialTheme.colorScheme.error)
+        TextButton(onClick = model::retryCalendarObservation, enabled = !state.loading && !state.busy) { Text("Reintentar observación del calendario") }
+    }
+    val reconciliation = state.reconciliation
+    if (state.needsReconciliation || reconciliation != null) {
+        TextButton(onClick = model::refreshCalendar, enabled = !state.busy) { Text("Actualizar vista sin volver a guardar") }
+    }
+    reconciliation?.let { pending ->
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Comparar guardado de resultado incierto", style = MaterialTheme.typography.titleMedium)
+                Text("El borrador se conserva. La coincidencia de datos no confirma qué ocurrió con la operación anterior.")
+                val comparisons = pending.comparisons()
+                if (comparisons == null) Text("Lee el calendario para consultar lo almacenado antes de decidir.")
+                comparisons?.forEach { entry ->
+                    Text(entry.date.toString(), style = MaterialTheme.typography.titleSmall)
+                    Text("Operación enviada: ${entry.proposed?.rangeText() ?: "Eliminar día (sin configurar)"}")
+                    Text("Datos leídos: ${entry.stored?.rangeText() ?: "Sin configurar"}")
+                    Text(if (entry.matches) "Los datos leídos coinciden con la propuesta." else "Los datos leídos difieren de la propuesta.")
+                }
+                if (!pending.reviewed) TextButton(onClick = model::reviewReconciliation, enabled = !state.busy && comparisons != null) {
+                    Text("He revisado la comparación")
+                } else Text("Comparación revisada. No se repetirá este guardado. Para otra operación, vuelve a abrir el día o vuelve a la revisión OCR.")
+                if (state.editor != null && state.editorHidden) TextButton(onClick = { model.openShift() }, enabled = !state.busy) { Text("Ver borrador conservado") }
+                if (pending.reviewed && state.editor != null && state.selected != null) {
+                    TextButton(onClick = { model.select(state.selected) }, enabled = !state.busy) { Text("Descartar este borrador e iniciar una nueva edición") }
+                }
+            }
+        }
+    }
+}
+@Composable
 fun ImportConfirmationScreen(model: CalendarViewModel, back: () -> Unit, calendar: () -> Unit) {
     val state by model.state.collectAsStateWithLifecycle()
+    val editable = !state.busy && state.reconciliation == null
     LaunchedEffect(state.importSaved) { if (state.importSaved) calendar() }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Confirmar días revisados", style = MaterialTheme.typography.headlineSmall)
         Text("Nada se guarda automáticamente. Compara cada propuesta con la imagen y con el calendario; los días no confirmados se conservan sin cambios.")
         Text("El OCR no clasifica horas extras. Sustituir un día reemplaza también sus marcas de extra; conserva el existente o edítalo después en el calendario.")
         if (state.busy) LinearProgressIndicator()
+        CalendarRecoveryActions(model, state)
         state.imports.forEachIndexed { index, proposal ->
             Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Propuesta ${index + 1}: ${proposal.date.ifBlank { "Fecha pendiente" }}")
@@ -98,20 +135,20 @@ fun ImportConfirmationScreen(model: CalendarViewModel, back: () -> Unit, calenda
                 Text("Propuesto: ${proposal.text.ifBlank { "Incompleto; introduce los intervalos manualmente" }}")
                 proposal.warnings.forEach { Text(it) }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = { model.editImport(index, choice = ImportChoice.KEEP) }, enabled = !state.busy) { Text("Conservar") }
-                    TextButton(onClick = { model.editImport(index, choice = ImportChoice.REPLACE) }, enabled = !state.busy) { Text(if (existing == null) "Añadir" else "Sustituir") }
-                    TextButton(onClick = { model.editImport(index, choice = ImportChoice.EDIT) }, enabled = !state.busy) { Text("Editar") }
+                    TextButton(onClick = { model.editImport(index, choice = ImportChoice.KEEP) }, enabled = editable) { Text("Conservar") }
+                    TextButton(onClick = { model.editImport(index, choice = ImportChoice.REPLACE) }, enabled = editable) { Text(if (existing == null) "Añadir" else "Sustituir") }
+                    TextButton(onClick = { model.editImport(index, choice = ImportChoice.EDIT) }, enabled = editable) { Text("Editar") }
                 }
                 Text("Decisión: ${when (proposal.choice) { ImportChoice.KEEP -> "Conservar calendario"; ImportChoice.REPLACE -> if (existing == null) "Añadir propuesta" else "Sustituir existente"; ImportChoice.EDIT -> "Guardar propuesta editada" }}")
                 if (proposal.choice == ImportChoice.EDIT) {
-                    OutlinedTextField(proposal.date, { model.editImport(index, date = it) }, label = { Text("Fecha propuesta ${index + 1} AAAA-MM-DD") }, enabled = !state.busy)
-                    OutlinedTextField(proposal.text, { model.editImport(index, text = it) }, label = { Text("Turnos propuestos ${index + 1} o LIBRE") }, enabled = !state.busy)
+                    OutlinedTextField(proposal.date, { model.editImport(index, date = it) }, label = { Text("Fecha propuesta ${index + 1} AAAA-MM-DD") }, enabled = editable)
+                    OutlinedTextField(proposal.text, { model.editImport(index, text = it) }, label = { Text("Turnos propuestos ${index + 1} o LIBRE") }, enabled = editable)
                 }
-                Row { Checkbox(proposal.confirmed, { model.editImport(index, confirmed = it) }, enabled = !state.busy && proposal.choice != ImportChoice.KEEP); Text("He revisado este día y confirmo guardarlo") }
+                Row { Checkbox(proposal.confirmed, { model.editImport(index, confirmed = it) }, enabled = editable && proposal.choice != ImportChoice.KEEP); Text("He revisado este día y confirmo guardarlo") }
             } }
         }
         state.message?.let { Text(it) }
-        Button(onClick = model::saveImport, enabled = !state.busy && state.importReady) { Text("Guardar días confirmados") }
+        Button(onClick = model::saveImport, enabled = editable && state.importReady) { Text("Guardar días confirmados") }
         TextButton(onClick = back, enabled = !state.busy) { Text("Volver a revisión") }
         TextButton(onClick = calendar, enabled = !state.busy) { Text("Continuar en calendario manual") }
         Text("Si el calendario ha cambiado, vuelve a revisión y abre de nuevo esta confirmación. Se volverán a comprobar los conflictos dentro de la transacción.")

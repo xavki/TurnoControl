@@ -27,7 +27,7 @@ fun DayDetailScreen(model: CalendarViewModel, back: () -> Unit) {
             TextButton(onClick = { model.closeEditor(); back() }, enabled = !state.busy) { Text("Volver al calendario") }
             Text(date?.format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM yyyy", Locale.forLanguageTag("es"))) ?: "Selecciona un día", style = MaterialTheme.typography.headlineSmall)
             Text(when (day?.kind) { DayKind.WORK -> "Trabajo"; DayKind.FREE -> "Libre"; else -> "Sin configurar" }, style = MaterialTheme.typography.titleMedium)
-            if (state.busy || !state.editorReady) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             day?.let {
                 Text("Programadas: ${minutesLabel(it.totalMinutes())}", style = MaterialTheme.typography.titleLarge)
                 Text("Extras declaradas: ${minutesLabel(it.extraMinutes())} · incluidas en el total")
@@ -44,8 +44,8 @@ fun DayDetailScreen(model: CalendarViewModel, back: () -> Unit) {
                 Text("${interval.start}${if (interval.startDayOffset == 1) " · día siguiente" else ""} → ${interval.end}${if (interval.endDayOffset == 1) " · día siguiente" else ""}", style = MaterialTheme.typography.titleMedium)
                 Text("${minutesLabel(interval.durationMinutes())}${if (interval.isExtra) " · Extra declarada" else " · Normal"}")
                 Row {
-                    TextButton(onClick = { model.openShift(index) }, enabled = !state.busy) { Text("Editar intervalo ${index + 1}") }
-                    TextButton(onClick = { action = "interval:$index" }, enabled = !state.busy) { Text("Eliminar intervalo ${index + 1}") }
+                    TextButton(onClick = { model.openShift(index) }, enabled = !state.busy && state.editorReady) { Text("Editar intervalo ${index + 1}") }
+                    TextButton(onClick = { action = "interval:$index" }, enabled = !state.busy && state.editorReady) { Text("Eliminar intervalo ${index + 1}") }
                 }
                 day.intervals.getOrNull(index + 1)?.let { next ->
                     val gap = PlannedScheduleValidator.start(next) - PlannedScheduleValidator.end(interval)
@@ -53,10 +53,11 @@ fun DayDetailScreen(model: CalendarViewModel, back: () -> Unit) {
                 }
             }
             state.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            CalendarRecoveryActions(model, state)
             if (date != null) {
                 TextButton(onClick = { if (day?.kind == DayKind.WORK) action = "free" else model.markFree() }, enabled = !state.busy && state.editorReady) { Text("Marcar libre") }
-                if (day != null) TextButton(onClick = { action = "day" }, enabled = !state.busy) { Text("Eliminar día") }
-                if (state.message != null) TextButton(onClick = { model.select(date) }, enabled = !state.busy) { Text("Recargar día") }
+                if (day != null) TextButton(onClick = { action = "day" }, enabled = !state.busy && state.editorReady) { Text("Eliminar día") }
+                if (state.message != null || state.saveOutcome == SaveOutcome.UNKNOWN) TextButton(onClick = { model.select(date) }, enabled = !state.busy) { Text("Recargar día") }
             }
             Text("Planificación · no son fichajes reales", style = MaterialTheme.typography.labelMedium)
             Spacer(Modifier.height(80.dp))
@@ -68,29 +69,33 @@ fun DayDetailScreen(model: CalendarViewModel, back: () -> Unit) {
         }) { Text("Confirmar cambio") } }, dismissButton = { TextButton(onClick = { action = null }) { Text("Cancelar cambio") } }) }
     if (state.emptyChoice) AlertDialog(onDismissRequest = model::cancelEmptyChoice, title = { Text("Último intervalo") }, text = { Text("¿Cómo quieres dejar este día?") },
         confirmButton = { TextButton(onClick = model::deleteDay) { Text("Sin configurar") } }, dismissButton = { TextButton(onClick = model::markFree) { Text("Libre") } })
-    state.editor?.let { editor -> ShiftEditorDialog(model, editor, state.busy, state.message) }
+    state.editor?.takeUnless { state.editorHidden }?.let { editor -> ShiftEditorDialog(model, editor, state) }
 }
 
 @Composable
-private fun ShiftEditorDialog(model: CalendarViewModel, editor: ShiftEditor, busy: Boolean, error: String?) {
+private fun ShiftEditorDialog(model: CalendarViewModel, editor: ShiftEditor, state: CalendarState) {
+    val busy = state.busy
+    val error = state.message
+    val editable = !busy && state.reconciliation == null
     var wheel by remember { mutableStateOf<Pair<Int, Boolean>?>(null) }
     AlertDialog(onDismissRequest = model::cancelShift, title = { Text(if (editor.editingIndex == null) "Añadir registro" else "Editar intervalo") }, text = {
         Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (editor.editingIndex == null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = !editor.split, onClick = { model.split(false) }, label = { Text("Normal") })
-                FilterChip(selected = editor.split, onClick = { model.split(true) }, label = { Text("Partido") })
+                FilterChip(enabled = state.reconciliation == null, selected = !editor.split, onClick = { model.split(false) }, label = { Text("Normal") })
+                FilterChip(enabled = state.reconciliation == null, selected = editor.split, onClick = { model.split(true) }, label = { Text("Partido") })
             }
             editor.slots.forEachIndexed { index, draft ->
                 Text("Intervalo ${index + 1}", style = MaterialTheme.typography.titleMedium)
-                OutlinedButton(onClick = { wheel = index to true }, enabled = !busy, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Entrada ${index + 1}" }) { Text("Entrada · ${draft.start ?: "Elegir hora"}") }
-                DayOffset("Día de entrada ${index + 1}", draft.startOffset, !busy) { model.slot(index, draft.copy(startOffset = it)) }
-                OutlinedButton(onClick = { wheel = index to false }, enabled = !busy, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Salida ${index + 1}" }) { Text("Salida · ${draft.end ?: "Elegir hora"}") }
-                DayOffset("Día de salida ${index + 1}", draft.endOffset, !busy) { model.slot(index, draft.copy(endOffset = it)) }
-                Row { Checkbox(draft.extra, { model.slot(index, draft.copy(extra = it)) }, enabled = !busy, modifier = Modifier.semantics { contentDescription = "Extra intervalo ${index + 1}" }); Text("Horas extras declaradas") }
+                OutlinedButton(onClick = { wheel = index to true }, enabled = editable, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Entrada ${index + 1}" }) { Text("Entrada · ${draft.start ?: "Elegir hora"}") }
+                DayOffset("Día de entrada ${index + 1}", draft.startOffset, editable) { model.slot(index, draft.copy(startOffset = it)) }
+                OutlinedButton(onClick = { wheel = index to false }, enabled = editable, modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Salida ${index + 1}" }) { Text("Salida · ${draft.end ?: "Elegir hora"}") }
+                DayOffset("Día de salida ${index + 1}", draft.endOffset, editable) { model.slot(index, draft.copy(endOffset = it)) }
+                Row { Checkbox(draft.extra, { model.slot(index, draft.copy(extra = it)) }, enabled = editable, modifier = Modifier.semantics { contentDescription = "Extra intervalo ${index + 1}" }); Text("Horas extras declaradas") }
             }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            CalendarRecoveryActions(model, state)
         }
-    }, confirmButton = { TextButton(onClick = model::saveShift, enabled = !busy) { Text("Guardar registro") } }, dismissButton = { TextButton(onClick = model::cancelShift, enabled = !busy) { Text("Cancelar registro") } })
+    }, confirmButton = { TextButton(onClick = model::saveShift, enabled = editable && state.editorReady) { Text("Guardar registro") } }, dismissButton = { TextButton(onClick = model::cancelShift, enabled = !busy) { Text(if (state.reconciliation?.reviewed == false) "Volver al detalle conservando borrador" else "Cancelar registro") } })
     wheel?.let { (index, start) ->
         val draft = editor.slots[index]
         TimeWheel(if (start) "Hora de entrada" else "Hora de salida", if (start) draft.start else draft.end, { wheel = null }) { time ->

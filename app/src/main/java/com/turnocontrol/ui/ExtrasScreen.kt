@@ -18,6 +18,7 @@ fun ExtrasScreen(model: CalendarViewModel, openDay: (LocalDate) -> Unit) {
     val days = state.days.map { it.planned() }.filter { it.intervals.any { i -> i.isExtra } }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Horas extras", style = MaterialTheme.typography.headlineSmall)
+        CalendarRecoveryActions(model, state)
         Text(minutesLabel(days.sumOf { it.extraMinutes() }), style = MaterialTheme.typography.headlineMedium)
         Text("Declaradas en la planificación · incluidas en el total programado", style = MaterialTheme.typography.bodySmall)
         if (days.isEmpty()) Text("Todavía no hay intervalos marcados como extras.")

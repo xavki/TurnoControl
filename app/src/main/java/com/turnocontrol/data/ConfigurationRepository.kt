@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import com.turnocontrol.domain.*
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -13,7 +15,8 @@ import kotlinx.coroutines.flow.map
 
 private val Context.preferences by preferencesDataStore("preferences")
 @Singleton
-class ConfigurationRepository @Inject constructor(private val db: TurnoDatabase, @ApplicationContext private val context: Context) {
+class ConfigurationRepository internal constructor(private val db: TurnoDatabase, private val preferences: DataStore<Preferences>) {
+    @Inject constructor(db: TurnoDatabase, @ApplicationContext context: Context) : this(db, context.preferences)
     val profile = db.configuration().observeProfile()
     suspend fun load(profile: Profile): ConfigurationDraft {
         val contract = db.configuration().contract()
@@ -33,6 +36,6 @@ class ConfigurationRepository @Inject constructor(private val db: TurnoDatabase,
             Contract(type = draft.type, agreedMinutes = decimal(draft.hours).multiply(BigDecimal(60)).longValueExact(), unit = draft.unit, validFrom = draft.from),
             rates)
     }
-    val darkTheme = context.preferences.data.map { it[booleanPreferencesKey("dark_theme")] ?: false }
-    suspend fun setDarkTheme(enabled: Boolean) { context.preferences.edit { it[booleanPreferencesKey("dark_theme")] = enabled } }
+    val darkTheme = preferences.data.map { it[booleanPreferencesKey("dark_theme")] ?: false }
+    suspend fun setDarkTheme(enabled: Boolean) { preferences.edit { it[booleanPreferencesKey("dark_theme")] = enabled } }
 }
