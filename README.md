@@ -2,7 +2,7 @@
 
 Aplicación Android nativa para organizar turnos programados en un calendario. Permite introducirlos manualmente o preparar propuestas desde una fotografía mediante OCR local, revisarlas y confirmar su guardado.
 
-**Versión 0.1.0 — versión inicial en desarrollo.** Proyecto de portfolio, sin publicación de producción. No registra horas realmente trabajadas ni calcula nóminas.
+**Versión 0.1.0 — versión inicial de portfolio.** No registra horas realmente trabajadas ni calcula nóminas. Requiere Android 8.0 (API 26) o superior. Notas de versión, instalación y límites: [RELEASE_NOTES_0.1.0.md](RELEASE_NOTES_0.1.0.md).
 
 ## Funcionalidades
 
@@ -92,7 +92,9 @@ pwsh -File ./scripts/verify-restart.ps1 -AdbPath /ruta/al/Android/Sdk/platform-t
 
 En Windows también sirve Windows PowerShell y la ruta a `adb.exe`. Sin `-AdbPath`, se busca en `ANDROID_HOME`, `ANDROID_SDK_ROOT`, PATH y finalmente `.tools/android-sdk`. Requiere exactamente un dispositivo autorizado. Instala solo los APK aislados y verifica perfil, contrato, cinco tarifas, partidos, nocturnos y extras con PID distinto.
 
-La preparación del 15/10/2026 registró **69 tests locales y 19 Android aprobados**, compilación correcta y lint sin errores, con 43/47 advertencias de mantenimiento. La prueba manual OCR del 15/10/2026 fue aprobada por el usuario para el formato probado. Resultados, incidencias y límites de la verificación: [PREPARACION_V0_1_0.md](docs/PREPARACION_V0_1_0.md).
+**Estado de validación de 0.1.0 (10/11/2026, commit `e4f1271`).** 98 pruebas unitarias correctas (Debug) y lint sin errores (22 advertencias de mantenimiento). Las dos ejecuciones instrumentales completas auditadas de forma independiente (19/19, variante Verification, emulador API 35) corresponden a una versión anterior de un ajuste de las pruebas (`assertLaunched`); los 7 tests OCR revisados después sí corresponden al commit publicado. La validación física (Samsung Galaxy A53, Android 16) se hizo con la variante Verification y datos sintéticos, no con el APK Release. El APK Release firmado se instaló en limpio en un emulador (API 35) y superó arranque, calendario, creación de un turno sintético y persistencia tras cierre y `force-stop`; no se ha probado en un dispositivo físico. No se ha evaluado la accesibilidad con TalkBack y un fallo gráfico (SIGSEGV en `libhwui`) visto una vez por un auditor no se reprodujo y sigue sin explicar. Pendientes y límites: [PENDIENTES_FUTUROS.md](PENDIENTES_FUTUROS.md).
+
+*Cifras históricas (preparación del 15/10/2026, anteriores a las correcciones posteriores):* **69 tests locales y 19 Android aprobados**, compilación correcta y lint sin errores, con 43/47 advertencias de mantenimiento. La prueba manual OCR del 15/10/2026 fue aprobada por el usuario para el formato probado. Resultados, incidencias y límites de la verificación: [PREPARACION_V0_1_0.md](docs/PREPARACION_V0_1_0.md).
 
 Se prueban migraciones 1→4, 2→4 y 3→4, conservación de configuración, edición/eliminación, medianoche, extras, conflictos y regresión OCR. Las imágenes se generan con Canvas y datos ficticios; las respuestas de los selectores se simulan con Espresso Intents.
 
@@ -112,7 +114,7 @@ Se prueban migraciones 1→4, 2→4 y 3→4, conservación de configuración, ed
 - Precisión de minutos, desplazamientos de 0/1 día y máximo técnico de 24 horas por intervalo y sumadas por día de inicio; no son reglas laborales.
 - Totales nominales de planificación, sin resolver automáticamente cambios de horario de verano. Sin fichajes, notificaciones, PDF ni cálculos salariales.
 - Un perfil local, sin sincronización ni historial de vigencias de configuración.
-- Cobertura manual limitada al formato probado y Samsung A53; pendiente una matriz de dispositivos y evaluación completa de accesibilidad.
+- Cobertura manual limitada al formato probado y a un Samsung A53; pendiente una matriz de dispositivos y la evaluación de accesibilidad con TalkBack. El selector de fila sobre la fotografía tiene carencias de accesibilidad conocidas.
 
 ## Estado y documentación
 
@@ -122,6 +124,8 @@ La versión inicial reúne calendario persistente, Room 4, rediseño e importaci
 - [Calendario y persistencia](docs/CALENDARIO.md)
 - [Rediseño y Room 4](docs/REDISENO_INTERFAZ.md)
 - [Preparación y cierre local de v0.1.0](docs/PREPARACION_V0_1_0.md)
+- [Notas de versión 0.1.0](RELEASE_NOTES_0.1.0.md)
+- [Pendientes para futuras versiones](PENDIENTES_FUTUROS.md)
 
 ## Licencia
 
