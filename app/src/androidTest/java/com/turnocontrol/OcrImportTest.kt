@@ -52,6 +52,17 @@ class OcrImportTest {
         return FileProvider.getUriForFile(context, "${context.packageName}.ocr-fixtures", file)
     }
 
+    /** Checks the recorded intents. Espresso's intended() also waits for window focus, which a headless emulator may never grant. */
+    private fun assertLaunched(action: String) {
+        val count = Intents.getIntents().count { it.action == action }
+        assertEquals("El intent $action debe lanzarse exactamente una vez", 1, count)
+    }
+
+    private companion object {
+        /** Ceiling only: waitUntil returns as soon as the OCR result is on screen. Cold ML Kit on a software-rendered emulator took ~35 s for a whole test. */
+        const val OCR_TIMEOUT_MS = 90_000L
+    }
+
     private fun openImport() {
         compose.onNodeWithText("Ajustes").performClick()
         compose.onNodeWithText("Importar horario").performScrollTo().performClick()
@@ -92,7 +103,7 @@ class OcrImportTest {
         Intents.intending(hasAction(Intent.ACTION_OPEN_DOCUMENT)).respondWith(ActivityResult(Activity.RESULT_OK, Intent().setData(uri)))
         openImport()
         compose.onNodeWithText("Seleccionar archivo").performScrollTo().performClick()
-        compose.waitUntil(30000) { compose.onAllNodes(hasText("Revisar turnos del trabajador")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(OCR_TIMEOUT_MS) { compose.onAllNodes(hasText("Revisar turnos del trabajador")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Revisar turnos del trabajador").performScrollTo().performClick()
         compose.onNodeWithText("Trabajador: nombre completo").performScrollTo().performTextReplacement("SIN COINCIDENCIA")
         compose.onNodeWithText("Alias exacto (opcional)").performScrollTo().performTextClearance()
@@ -131,7 +142,7 @@ class OcrImportTest {
         Intents.intending(hasAction(Intent.ACTION_OPEN_DOCUMENT)).respondWith(ActivityResult(Activity.RESULT_OK, Intent().setData(uri)))
         openImport()
         compose.onNodeWithText("Seleccionar archivo").performScrollTo().performClick()
-        compose.waitUntil(30000) { compose.onAllNodes(hasText("Revisar turnos del trabajador")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(OCR_TIMEOUT_MS) { compose.onAllNodes(hasText("Revisar turnos del trabajador")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Revisar turnos del trabajador").performScrollTo().performClick()
         compose.onNodeWithText("Trabajador: nombre completo").performScrollTo().performTextReplacement("ALFA")
         compose.onNodeWithText("Alias exacto (opcional)").performScrollTo().performTextClearance()
@@ -174,11 +185,11 @@ class OcrImportTest {
         Intents.intending(hasAction(Intent.ACTION_OPEN_DOCUMENT)).respondWith(ActivityResult(Activity.RESULT_OK, Intent().setData(uri)))
         openImport()
         compose.onNodeWithText("Seleccionar archivo").performScrollTo().performClick()
-        compose.waitUntil(30000) { compose.onAllNodes(hasText("ALFA BETA 123", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(OCR_TIMEOUT_MS) { compose.onAllNodes(hasText("ALFA BETA 123", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Vista previa de la imagen seleccionada").assertExists()
         compose.onNodeWithText("PRUEBA", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("ALFA BETA 123", substring = true).assertExists()
-        Intents.intended(hasAction(Intent.ACTION_OPEN_DOCUMENT))
+        assertLaunched(Intent.ACTION_OPEN_DOCUMENT)
         compose.activityRule.scenario.recreate()
         compose.onNodeWithText("PRUEBA", substring = true).assertExists()
         compose.onNodeWithText("Descartar imagen y texto").performScrollTo().performClick()
@@ -192,9 +203,9 @@ class OcrImportTest {
         Intents.intending(hasAction(pickerIntent.action)).respondWith(ActivityResult(Activity.RESULT_OK, Intent().setData(fixture("gallery.png"))))
         openImport()
         compose.onNodeWithText("Seleccionar de galería").performClick()
-        compose.waitUntil(30000) { compose.onAllNodes(hasText("ALFA BETA 123", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(OCR_TIMEOUT_MS) { compose.onAllNodes(hasText("ALFA BETA 123", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("Vista previa de la imagen seleccionada").assertExists()
-        Intents.intended(hasAction(pickerIntent.action))
+        assertLaunched(pickerIntent.action!!)
     }
 
     @Test fun galleryPickerCancellationAndUnreadableFileAreHandled() {
