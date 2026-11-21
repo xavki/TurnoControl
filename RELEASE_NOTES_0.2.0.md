@@ -35,6 +35,13 @@ Estado: desarrollo local en la rama `feature/0.2.0-redesign`. Sin publicar, sin 
 - Validación manual en el mismo dispositivo con datos TEST (eliminados después). Las capturas de `docs/screenshots` siguen siendo de 0.1.0.
 - La tarea Gradle `connectedVerificationAndroidTest` desinstala el paquete `verification` al terminar (borra sus datos sintéticos); para conservarlos, añadir `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true` o instalar con `adb install -r` y lanzar `am instrument`.
 
+## Correcciones posteriores al cierre de 0.2.0 (sin publicar)
+
+- **Copia de seguridad y restauración locales** (Ajustes → Copia de seguridad), sin permisos ni red. Formato documentado en `docs/COPIAS_DE_SEGURIDAD.md`.
+- **Protección de compatibilidad.** Los datos se marcan con su formato. Valores desconocidos o datos y copias de una versión más nueva se rechazan sin modificarlos y sin cerrar la app. Guardar Ajustes conserva las tarifas de tipos desconocidos.
+- **OCR más seguro con poca memoria.** El presupuesto de píxeles se ajusta a la memoria disponible, hay un único reintento a menor resolución y, si no es posible procesar la imagen con seguridad, aparece un mensaje claro. El comportamiento con memoria suficiente no cambia.
+- Lista de comprobación de publicación en `docs/LISTA_PUBLICACION.md`.
+
 ## Compilar y probar
 
 ```powershell

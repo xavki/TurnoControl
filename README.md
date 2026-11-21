@@ -109,6 +109,8 @@ Se prueban migraciones 1→4, 2→4 y 3→4, conservación de configuración, ed
 - Sin permisos generales de almacenamiento: se utilizan URI de los selectores. Un proveedor externo puede descargar un archivo antes de entregarlo a la aplicación.
 - Fotografías y documentos OCR completos no se persisten; el estado provisional se pierde al terminar el proceso.
 - Datos en almacenamiento privado de Android; backup automático y transferencia desactivados.
+- Copia de seguridad local bajo control del usuario (Ajustes → Copia de seguridad): archivo JSON versionado con comprobación de integridad, validado por completo antes de restaurar, con copia automática previa y recuperación de restauraciones interrumpidas. Véase [docs/COPIAS_DE_SEGURIDAD.md](docs/COPIAS_DE_SEGURIDAD.md).
+- Al arrancar se comprueba que los datos guardados son compatibles con la versión instalada; si proceden de una versión más nueva o contienen valores desconocidos, se muestran como no compatibles y no se modifican.
 - No se afirma cifrado adicional de la base de datos ni protección frente a un dispositivo comprometido.
 
 ## Limitaciones
