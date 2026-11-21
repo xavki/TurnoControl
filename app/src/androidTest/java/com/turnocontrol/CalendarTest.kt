@@ -13,6 +13,7 @@ import org.junit.Assert.*
 
 class CalendarTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    @org.junit.Before fun waitForStartupGate() = compose.awaitStartup()
     private val date = LocalDate.now()
     private fun <T> storage(action: suspend (ScheduleRepository) -> T): T = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

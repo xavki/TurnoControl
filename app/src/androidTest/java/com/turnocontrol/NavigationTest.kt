@@ -9,6 +9,7 @@ import org.junit.Test
 
 class NavigationTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    @org.junit.Before fun waitForStartupGate() = compose.awaitStartup()
 
     @Test fun navigationConfigurationAndThemeSurviveRecreation() {
         compose.waitUntil(10000) {

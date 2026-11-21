@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit
 /** Real Compose captures of synthetic planning only, never system bars or user photos. */
 class PortfolioScreenshotsTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
+    @org.junit.Before fun waitForStartupGate() = compose.awaitStartup()
 
     @Test fun syntheticCalendarDetailEditorAndExtras() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

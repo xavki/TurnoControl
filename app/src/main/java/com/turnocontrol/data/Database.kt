@@ -4,6 +4,7 @@ import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.turnocontrol.domain.DataFormat
 
 @Entity data class Profile(@PrimaryKey val id: Long = 1, val displayName: String, val alias: String, val zoneId: String)
 @Entity(foreignKeys = [ForeignKey(entity = Profile::class, parentColumns = ["id"], childColumns = ["profileId"], onDelete = ForeignKey.CASCADE)], indices = [Index("profileId")])
@@ -27,11 +28,12 @@ interface ConfigurationDao {
         if (rate == null) deleteRate() else putRate(rate)
     }
     @Query("DELETE FROM PayRule WHERE id = 1") suspend fun deleteRate()
-    @Query("DELETE FROM PayRule WHERE profileId = 1") suspend fun deleteRates()
-    @Transaction suspend fun saveConfiguration(profile: Profile, contract: Contract, rates: List<PayRule>) {
+    @Query("DELETE FROM PayRule WHERE profileId = 1 AND type IN (:types)") suspend fun deleteRates(types: Collection<String>)
+    /** Replaces only the rate types this version manages; rows written by a newer version are preserved. */
+    @Transaction suspend fun saveConfiguration(profile: Profile, contract: Contract, rates: List<PayRule>, managedTypes: Collection<String> = DataFormat.knownRateTypes) {
         putProfile(profile)
         putContract(contract)
-        deleteRates()
+        deleteRates(managedTypes)
         rates.forEach { putRate(it) }
     }
 }

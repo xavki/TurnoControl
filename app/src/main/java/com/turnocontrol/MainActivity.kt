@@ -22,12 +22,21 @@ class MainActivity : ComponentActivity() {
     private val reviewModel: ScheduleReviewViewModel by viewModels()
     private val calendarModel: CalendarViewModel by viewModels()
     private val summaryModel: SummaryViewModel by viewModels()
+    private val startupModel: StartupViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             val theme by model.theme.collectAsStateWithLifecycle()
-            TurnoTheme(theme.dark) { TurnoApp(model, importModel, reviewModel, calendarModel, summaryModel) }
+            val startup by startupModel.state.collectAsStateWithLifecycle()
+            TurnoTheme(theme.dark) {
+                // The calendar ViewModels are created lazily, only after the stored data has been accepted.
+                when (val gate = startup) {
+                    StartupState.Checking -> StartupCheckingScreen()
+                    is StartupState.Blocked -> IncompatibleDataScreen(gate.reasons, startupModel::retry)
+                    StartupState.Ready -> TurnoApp(model, importModel, reviewModel, calendarModel, summaryModel)
+                }
+            }
         }
     }
 }

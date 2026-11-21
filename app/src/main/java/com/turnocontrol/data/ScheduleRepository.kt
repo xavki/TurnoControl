@@ -8,7 +8,8 @@ import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 
-fun StoredScheduleDay.planned() = PlannedDay(LocalDate.parse(day.date), DayKind.valueOf(day.kind), intervals.sortedBy { it.position }.map {
+fun StoredScheduleDay.planned() = PlannedDay(LocalDate.parse(day.date),
+    DataFormat.dayKind(day.kind) ?: throw UnsupportedDataException("Tipo de día desconocido «${day.kind}» el ${day.date}."), intervals.sortedBy { it.position }.map {
     ProvisionalInterval(LocalTime.of(it.startMinute / 60, it.startMinute % 60), LocalTime.of(it.endMinute / 60, it.endMinute % 60), it.startDayOffset, it.endDayOffset, it.isExtra)
 })
 

@@ -30,8 +30,14 @@ class ConfigurationRepository internal constructor(private val db: TurnoDatabase
     }
     suspend fun save(draft: ConfigurationDraft) {
         require(draft.validate() == null)
+        // Each managed type keeps its existing id (or its historical default); ids of unknown rows are never reused.
+        val existing = db.configuration().rates()
+        val taken = existing.map { it.id }.toMutableSet()
+        var next = (existing.maxOfOrNull { it.id } ?: 0L).coerceAtLeast(DataFormat.knownRateTypes.size.toLong())
         val rates = (linkedMapOf("HOURLY_BASE" to draft.hourlyRate) + rateLabels.keys.associateWith { draft.extraRates[it].orEmpty() }).entries.mapIndexedNotNull { index, (type, amount) ->
-            amount.takeIf { it.isNotBlank() }?.let { PayRule(id = index.toLong() + 1, type = type, amountDecimal = decimal(it).toPlainString(), mode = if (type in listOf("NIGHT", "SPECIAL_NIGHT", "EXTRA_PAY")) "PLUS" else "BASE", accumulation = "UNDEFINED", validFrom = draft.from) }
+            val id = existing.firstOrNull { it.type == type }?.id ?: (index.toLong() + 1).takeIf { it !in taken } ?: ++next
+            taken += id
+            amount.takeIf { it.isNotBlank() }?.let { PayRule(id = id, type = type, amountDecimal = decimal(it).toPlainString(), mode = if (type in listOf("NIGHT", "SPECIAL_NIGHT", "EXTRA_PAY")) "PLUS" else "BASE", accumulation = "UNDEFINED", validFrom = draft.from) }
         }
         db.configuration().saveConfiguration(Profile(displayName = draft.name.trim(), alias = draft.alias.trim(), zoneId = draft.zone),
             Contract(type = draft.type, agreedMinutes = decimal(draft.hours).multiply(BigDecimal(60)).longValueExact(), unit = draft.unit, validFrom = draft.from),

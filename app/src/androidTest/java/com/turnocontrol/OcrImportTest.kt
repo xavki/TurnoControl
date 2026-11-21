@@ -32,7 +32,7 @@ class OcrImportTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
     private val context get() = ApplicationProvider.getApplicationContext<android.content.Context>()
     private val directory get() = File(context.cacheDir, "ocr-fixtures").apply { mkdirs() }
-    @Before fun setup() { Intents.init() }
+    @Before fun setup() { compose.awaitStartup(); Intents.init() }
     @After fun cleanup() {
         Intents.release()
         directory.listFiles()?.forEach { it.delete() }
