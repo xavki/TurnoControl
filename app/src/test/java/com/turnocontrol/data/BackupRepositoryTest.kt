@@ -145,6 +145,16 @@ class BackupRepositoryTest {
         assertThrows(BackupException::class.java) { repository.readFrom { ByteArrayInputStream(byteArrayOf(0xFF.toByte(), 0xFE.toByte(), 0x00)) } }
     }
 
+    @Test fun exportRefusesUnrestorableDataBeforeWritingAnyFile() = runTest {
+        seed("Perfil A", listOf("2026-03-02"))
+        db.openHelper.writableDatabase.execSQL("UPDATE ScheduledDay SET origin = 'FUTURE_SOURCE'")
+        var opened = false
+        val error = runCatching { repository().exportTo({ opened = true; ByteArrayOutputStream() }, { ByteArrayInputStream(ByteArray(0)) }) }.exceptionOrNull()
+        assertTrue(error is BackupException)
+        assertTrue(error!!.message!!.contains("No se ha escrito ningún archivo"))
+        assertFalse("No file must be created", opened)
+    }
+
     @Test fun emptyDatabaseCanBeBackedUpAndRestored() = runTest {
         val repository = repository()
         val (exported, bytes) = exportBytes(repository)

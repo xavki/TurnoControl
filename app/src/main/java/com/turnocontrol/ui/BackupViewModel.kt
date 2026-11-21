@@ -21,7 +21,8 @@ data class DataCounts(val profile: Boolean, val contract: Boolean, val rates: In
 fun BackupSnapshot.counts() = DataCounts(profiles.isNotEmpty(), contracts.isNotEmpty(), payRules.size, days.size, intervals.size, days.minOfOrNull { it.date }, days.maxOfOrNull { it.date })
 
 data class RestorePreview(val file: BackupFile, val incoming: DataCounts, val current: DataCounts)
-data class BackupState(val busy: Boolean = false, val message: String? = null, val error: Boolean = false, val preview: RestorePreview? = null, val restored: Int = 0)
+/** [dataReplaced] is a one-shot signal: the screen resets dependent state once and then calls [BackupViewModel.consumeDataReplaced]. */
+data class BackupState(val busy: Boolean = false, val message: String? = null, val error: Boolean = false, val preview: RestorePreview? = null, val dataReplaced: Boolean = false)
 
 @HiltViewModel
 class BackupViewModel internal constructor(
@@ -65,6 +66,7 @@ class BackupViewModel internal constructor(
             mutable.update { it.copy(preview = RestorePreview(file, file.snapshot.counts(), current().counts())) }
         }
     }
+    fun consumeDataReplaced() = mutable.update { it.copy(dataReplaced = false) }
     fun cancelRestore() = mutable.update { it.copy(preview = null, message = "Restauración cancelada. No se ha modificado nada.", error = false) }
 
     fun confirmRestore() {
@@ -72,7 +74,7 @@ class BackupViewModel internal constructor(
         run {
             val stored = restore(preview.file)
             val c = stored.counts()
-            mutable.update { it.copy(preview = null, restored = it.restored + 1,
+            mutable.update { it.copy(preview = null, dataReplaced = true,
                 message = "Copia restaurada y comprobada: ${c.days} día(s), ${c.intervals} intervalo(s) y ${c.rates} tarifa(s). Se guardó en el dispositivo una copia automática de los datos anteriores.") }
         }
     }

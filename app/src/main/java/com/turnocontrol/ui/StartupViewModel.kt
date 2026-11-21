@@ -35,6 +35,10 @@ class StartupViewModel internal constructor(
         { withContext(Dispatchers.IO) { checker.check() } }, { backup.recoverInterrupted() }, { backup.keepCurrentData() }, { backup.restoreSafetyCopy() })
     private val mutable = MutableStateFlow<StartupState>(StartupState.Checking)
     val state = mutable.asStateFlow()
+    private val replaced = MutableStateFlow(false)
+    /** One-shot: stored data may have changed during recovery, after ConfigurationViewModel (created before the gate) loaded its draft. */
+    val dataReplaced = replaced.asStateFlow()
+    fun consumeDataReplaced() { replaced.value = false }
     init { retry() }
     fun retry() {
         mutable.value = StartupState.Checking
@@ -45,7 +49,7 @@ class StartupViewModel internal constructor(
                     // Recovery reads the database through Room, so it runs only after the data was accepted.
                     CompatibilityReport.Compatible -> when (val outcome = recover()) {
                         RecoveryOutcome.None -> StartupState.Ready
-                        RecoveryOutcome.RolledForward -> StartupState.Recovery("Se completó una restauración que se había interrumpido. Los datos de la copia están guardados.", false)
+                        RecoveryOutcome.RolledForward -> { replaced.value = true; StartupState.Recovery("Se completó una restauración que se había interrumpido. Los datos de la copia están guardados.", false) }
                         RecoveryOutcome.Discarded -> StartupState.Recovery("Una restauración se interrumpió antes de modificar los datos. Se conservan tus datos anteriores.", false)
                         is RecoveryOutcome.NeedsDecision -> StartupState.Recovery(outcome.message, true)
                     }
@@ -64,7 +68,7 @@ class StartupViewModel internal constructor(
         if (!current.needsDecision || current.busy) return
         mutable.value = current.copy(busy = true)
         viewModelScope.launch {
-            try { action(); retry() }
+            try { action(); replaced.value = true; retry() }
             catch (e: Exception) {
                 if (e is CancellationException) throw e
                 mutable.value = current.copy(message = current.message + "\nNo se pudo completar la opción elegida: ${e.message}", busy = false)

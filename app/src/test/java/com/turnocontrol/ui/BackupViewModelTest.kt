@@ -40,8 +40,14 @@ class BackupViewModelTest {
         model.confirmRestore(); runCurrent()
         assertEquals(1, restores)
         assertNull(model.state.value.preview)
-        assertEquals(1, model.state.value.restored)
+        assertTrue(model.state.value.dataReplaced)
         assertTrue(model.state.value.message!!.contains("restaurada y comprobada"))
+        // Consumed exactly once: a later recomposition (e.g. rotation) sees no pending reset.
+        model.consumeDataReplaced()
+        assertFalse(model.state.value.dataReplaced)
+        runCurrent()
+        assertFalse(model.state.value.dataReplaced)
+        assertEquals(1, restores)
     }
 
     @Test fun cancellationAndInvalidFilesNeverRestore() = runTest(dispatcher) {
@@ -56,7 +62,7 @@ class BackupViewModelTest {
         model.pick(null)
         model.confirmRestore(); runCurrent()
         assertEquals(0, restores)
-        assertEquals(0, model.state.value.restored)
+        assertFalse(model.state.value.dataReplaced)
     }
 
     @Test fun exportReportsOnlyAfterVerificationAndUsesAPrivateFileName() = runTest(dispatcher) {

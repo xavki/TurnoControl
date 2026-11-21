@@ -42,6 +42,7 @@ Se conservan los identificadores originales y, con ellos, las relaciones entre r
 ## Exportación
 
 1. Se leen todas las tablas dentro de una única transacción de Room, para obtener una instantánea coherente.
+   Antes de escribir se valida con las mismas reglas que la restauración. Si algún valor guardado no se pudiera restaurar, no se crea el archivo y el mensaje indica qué valor lo impide.
 2. La preferencia de DataStore se lee aparte, porque no comparte transacción con Room.
 3. Se escribe el archivo, se vuelve a leer y se valida. El éxito se comunica solo si el contenido leído coincide con los datos.
 

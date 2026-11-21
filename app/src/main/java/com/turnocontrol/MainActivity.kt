@@ -38,8 +38,13 @@ class MainActivity : ComponentActivity() {
                     is StartupState.Recovery -> InterruptedRestoreScreen(gate, startupModel::keepCurrentData, startupModel::restoreSafetyCopy, startupModel::acknowledge)
                     StartupState.Ready -> {
                         val backup by backupModel.state.collectAsStateWithLifecycle()
+                        val recovered by startupModel.dataReplaced.collectAsStateWithLifecycle()
+                        // One-shot events, consumed after handling, so an Activity recreation never repeats the reset.
+                        LaunchedEffect(recovered) { if (recovered) { model.reload(); startupModel.consumeDataReplaced() } }
                         // A completed restore replaced every row: reload the configuration draft and drop calendar/OCR drafts.
-                        LaunchedEffect(backup.restored) { if (backup.restored > 0) { model.reload(); calendarModel.resetAfterRestore(); reviewModel.clear(); importModel.clear() } }
+                        LaunchedEffect(backup.dataReplaced) {
+                            if (backup.dataReplaced) { model.reload(); calendarModel.resetAfterRestore(); reviewModel.clear(); importModel.clear(); backupModel.consumeDataReplaced() }
+                        }
                         TurnoApp(model, importModel, reviewModel, calendarModel, summaryModel, backupModel)
                     }
                 }

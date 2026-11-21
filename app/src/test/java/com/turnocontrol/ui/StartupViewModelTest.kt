@@ -44,8 +44,14 @@ class StartupViewModelTest {
         val rolled = StartupViewModel(check = { CompatibilityReport.Compatible }, recover = { RecoveryOutcome.RolledForward }).also { store.put("d", it) }
         runCurrent()
         assertFalse((rolled.state.value as StartupState.Recovery).needsDecision)
+        assertTrue("Configuration must reload after recovery", rolled.dataReplaced.value)
         rolled.acknowledge()
         assertEquals(StartupState.Ready, rolled.state.value)
+        rolled.consumeDataReplaced()
+        assertFalse(rolled.dataReplaced.value)
+        val clean = StartupViewModel(check = { CompatibilityReport.Compatible }).also { store.put("f", it) }
+        runCurrent()
+        assertFalse(clean.dataReplaced.value)
 
         var outcome: RecoveryOutcome = RecoveryOutcome.NeedsDecision("Sin coincidencia")
         var restored = 0
@@ -58,5 +64,6 @@ class StartupViewModelTest {
         undecided.restoreSafetyCopy(); runCurrent()
         assertEquals(1, restored)
         assertEquals(StartupState.Ready, undecided.state.value)
+        assertTrue(undecided.dataReplaced.value)
     }
 }

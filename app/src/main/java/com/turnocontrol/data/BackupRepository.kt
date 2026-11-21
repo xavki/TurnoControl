@@ -80,6 +80,10 @@ class BackupRepository internal constructor(
     /** Writes the backup, then reads it back and decodes it: success is reported only for a verified file. */
     internal suspend fun exportTo(open: () -> OutputStream?, reopen: () -> InputStream?): BackupFile = withContext(Dispatchers.IO) { lock.withLock {
         val file = BackupFile(header(), snapshot())
+        // Validate before writing: a value this version cannot restore must not produce a backup file at all.
+        try { BackupCodec.validate(file.snapshot) } catch (e: BackupException) {
+            throw BackupException("No se puede crear la copia: los datos guardados contienen un valor que esta versión no puede restaurar (${e.message?.removePrefix("Copia no válida: ")}). No se ha escrito ningún archivo.")
+        }
         val text = BackupCodec.encode(file)
         (open() ?: throw BackupException("No se pudo crear el archivo de copia.")).use { it.write(text.toByteArray(Charsets.UTF_8)) }
         val written = readFrom(reopen)

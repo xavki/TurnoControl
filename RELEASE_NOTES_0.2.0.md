@@ -41,6 +41,7 @@ Estado: desarrollo local en la rama `feature/0.2.0-redesign`. Sin publicar, sin 
 - **Protección de compatibilidad.** Los datos se marcan con su formato. Valores desconocidos o datos y copias de una versión más nueva se rechazan sin modificarlos y sin cerrar la app. Guardar Ajustes conserva las tarifas de tipos desconocidos.
 - **OCR más seguro con poca memoria.** El presupuesto de píxeles se ajusta a la memoria disponible, hay un único reintento a menor resolución y, si no es posible procesar la imagen con seguridad, aparece un mensaje claro. El comportamiento con memoria suficiente no cambia.
 - Lista de comprobación de publicación en `docs/LISTA_PUBLICACION.md`.
+- Estado de pruebas de estas correcciones (22/11/2026): 177 pruebas unitarias correctas y `lintDebug` sin errores. Las 30 pruebas instrumentadas compilan, pero **no se han ejecutado** con estas correcciones (sin dispositivo conectado); el «26/26» de arriba corresponde a la versión anterior a ellas.
 
 ## Compilar y probar
 
