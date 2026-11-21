@@ -32,5 +32,6 @@ val rateLabels = linkedMapOf(
     "EXTRA_PAY" to "Prorrata de pagas EUR/h",
     "COMPLEMENTARY" to "Hora complementaria EUR/h",
     "NIGHT" to "Plus nocturno EUR/h",
-    "SPECIAL_NIGHT" to "Plus nocturno especial EUR/h"
+    "SPECIAL_NIGHT" to "Plus nocturno especial EUR/h",
+    "EXTRA_HOUR" to "Hora extra EUR/h"
 )

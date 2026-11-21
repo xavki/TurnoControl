@@ -29,6 +29,25 @@ class PlannedScheduleTest {
         assertNull(PlannedScheduleValidator.validate(listOf(work("00:00-24:00"))))
         assertNotNull(PlannedScheduleValidator.validate(listOf(work("08:00-24:00 / 00:00-09:00"))))
     }
+    @Test fun absenceKindsRequireNoIntervals() {
+        for (kind in listOf(DayKind.VACATION, DayKind.SICK_LEAVE)) {
+            assertNull(PlannedScheduleValidator.validate(listOf(PlannedDay(date, kind, emptyList()))))
+            assertNotNull(PlannedScheduleValidator.validate(listOf(PlannedDay(date, kind, TimeCellParser.parse("08:00-12:00").intervals))))
+        }
+        assertEquals("Vacaciones", DayKind.VACATION.label)
+        assertEquals("Baja médica", DayKind.SICK_LEAVE.label)
+        assertEquals("Sin configurar", DayKind.UNKNOWN.label)
+    }
+    @Test fun overnightContinuationMayLandOnSickDay() {
+        assertNull(PlannedScheduleValidator.validate(listOf(work("22:00-02:00"), PlannedDay(date.plusDays(1), DayKind.SICK_LEAVE, emptyList()))))
+    }
+    @Test fun regularMinutesAndBoundaryIntervals() {
+        val split = work("08:00-12:00 / 16:00-20:00").let { it.copy(intervals = it.intervals.mapIndexed { index, interval -> interval.copy(isExtra = index == 1) }) }
+        assertEquals(240, split.regularMinutes())
+        assertEquals(LocalTime.of(8, 0), split.firstInterval()!!.start)
+        assertEquals(LocalTime.of(20, 0), split.lastInterval()!!.end)
+        assertNull(PlannedDay(date, DayKind.FREE, emptyList()).firstInterval())
+    }
     @Test fun extrasAreSubsetOfPlanningAndBreaksAreExcluded() {
         val split = work("08:00-12:00 / 16:00-20:00").let { it.copy(intervals = it.intervals.mapIndexed { index, interval -> interval.copy(isExtra = index == 1) }) }
         assertEquals(480, split.totalMinutes())

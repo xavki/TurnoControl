@@ -39,3 +39,17 @@ private/
 *.webp
 *.png
 !docs/screenshots/*.png
+
+# Local QA outputs: device dumps, database backups, screenshots and scripts. Never public.
+test-output/
+__pycache__/
+*.pyc
+*.stackdump
+hs_err_pid*
+*.hprof
+# Backups made with the app's own export feature (may contain personal schedules).
+*.turnocontrol-backup
+*.turnocontrol-backup.json
+# Private technical reports and internal planning notes.
+INFORME_*.md
+docs/superpowers/

@@ -75,6 +75,25 @@ class CalendarTest {
         compose.onNodeWithText("Mes").performClick()
         compose.onNodeWithContentDescription("$date · Sin configurar", substring = true).assertExists()
     }
+    @Test fun vacationAndSickLeaveRangesAreCounted() {
+        select("Sin configurar")
+        compose.onNodeWithText("Marcar baja médica").performScrollTo().performClick()
+        compose.onNodeWithText("Solo este día").assertExists()
+        compose.onNodeWithText("Se marcarán 1 día como baja médica").assertExists()
+        compose.onNodeWithText("Confirmar cambio").performClick()
+        compose.waitUntil(10000) { storage { it.snapshot().singleOrNull()?.day?.kind == "SICK_LEAVE" } }
+        compose.onNodeWithText("Baja médica").assertExists()
+        compose.onNodeWithText("Volver al calendario").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("$date · Baja médica", substring = true).assertExists()
+        compose.onNodeWithContentDescription("Baja médica: 1", substring = true).assertExists()
+        select("Baja médica")
+        compose.onNodeWithText("Quitar baja médica del periodo").performScrollTo().performClick()
+        compose.onNodeWithText("Confirmar cambio").performClick()
+        compose.waitUntil(10000) { storage { it.snapshot().isEmpty() } }
+        compose.onNodeWithText("Marcar vacaciones").performScrollTo().performClick()
+        compose.onNodeWithText("Confirmar cambio").performClick()
+        compose.waitUntil(10000) { storage { it.snapshot().singleOrNull()?.day?.kind == "VACATION" } }
+    }
     @Test fun manualCalendarSupportsSplitOvernightFreeDeletionAndMonthNavigation() {
         compose.onNodeWithContentDescription("Mes siguiente").performClick()
         compose.onNodeWithContentDescription("Mes anterior").performClick()
@@ -118,8 +137,11 @@ class CalendarTest {
         compose.onNodeWithText("Extras declaradas: 1 h 0 min · incluidas en el total").assertExists()
         compose.onNodeWithText("Volver al calendario").performScrollTo().performClick()
         compose.onNodeWithContentDescription("${date.plusDays(1)} · Sin configurar · Continuación nocturna", substring = true).assertExists()
-        compose.onNodeWithText("Horas extras").performClick()
-        compose.onNodeWithText("1 h 0 min").assertExists()
+        compose.onNodeWithContentDescription("Horas extra acumuladas de ${date.year}: 1 h 0 min").assertExists()
+        compose.onNodeWithContentDescription("Horas extra del mes", substring = true).assertContentDescriptionContains("1 h 0 min", substring = true)
+        compose.onNodeWithText("Resumen").performClick()
+        compose.onNodeWithContentDescription("Horas extra acumuladas de ${date.year}: 1 h 0 min").assertExists()
+        compose.onNodeWithText("Extras declaradas del mes").performScrollTo().assertExists()
         compose.onNodeWithText("Calendario").performClick()
         select("Trabajo")
         compose.onNodeWithText("Marcar libre").performScrollTo().performClick()

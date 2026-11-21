@@ -12,6 +12,7 @@ Ninguno de estos puntos se ha clasificado como P0 ni P1. Origen: lectura de cód
 - Evaluación real con TalkBack del flujo de importación.
 
 ## Funcionales (P2)
+- Historial de vigencias de tarifas: hoy la estimación bruta aplica las tarifas actuales a todos los periodos (y lo indica como «Estimación con las tarifas actuales»); un historial requeriría migración Room y se pospone.
 - Cambio de horario de verano: los totales son nominales.
 - La marca «hoy» puede quedar desfasada si la app sigue abierta pasada la medianoche.
 - El inicio de semana está fijado en lunes, sin atender a la configuración regional.
@@ -20,6 +21,7 @@ Ninguno de estos puntos se ha clasificado como P0 ni P1. Origen: lectura de cód
 - `ImageOcr.load` no captura `OutOfMemoryError` con imágenes muy grandes.
 
 ## Pruebas y entorno
+- Ejecutar la suite instrumentada de 0.2.0 (`connectedVerificationAndroidTest`) en un dispositivo o emulador y regenerar las capturas con `PortfolioScreenshotsTest`: en la preparación de 0.2.0 solo se compiló.
 - Probar la selección desde la galería con una imagen real, otras versiones de Android y recuperación tras fallo de escritura en dispositivo.
 - El SIGSEGV de `libhwui` observado por Codex no se reprodujo; queda sin explicar.
 - `captureDialog` en `PortfolioScreenshotsTest` y las pruebas de intents dependen del foco de ventana: en emuladores headless conviene ocultar los diálogos de error del sistema.

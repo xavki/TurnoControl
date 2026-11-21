@@ -287,14 +287,10 @@ class RecoveryViewModelTest {
         assertTrue(persisted.isEmpty())
     }
 
-    private fun prepareOcr(model: CalendarViewModel, editDecisions: Boolean = true) {
-        val parsed = TimeCellParser.parse("08:15-12:30")
-        val source = ProvisionalDay(date, "10/03/2032", "08:15-12:30", DayKind.WORK, parsed.intervals, InterpretationStatus.CORRECTED, emptyList())
-        model.prepareImport(listOf(ReviewDayDraft(source, date.toString(), "08:15-12:30")))
+    /** Days arrive already validated and explicitly reviewed; persisted starts empty, so the proposal is NEW. */
+    private fun prepareOcr(model: CalendarViewModel) {
+        model.prepareImport(listOf(PlannedDay(date, DayKind.WORK, TimeCellParser.parse("09:00-13:00").intervals)))
         dispatcher.scheduler.runCurrent()
-        if (!editDecisions) return
-        model.editImport(0, text = "09:00-13:00", choice = ImportChoice.EDIT)
-        model.editImport(0, confirmed = true)
     }
 
     @Test fun uncertainOcrPreservesDecisionsAndCannotRepeatUntilASeparateReviewedOperation() = runTest(dispatcher) {
@@ -310,7 +306,7 @@ class RecoveryViewModelTest {
         assertEquals(drafts, model.state.value.imports)
         assertFalse(model.state.value.importReady)
         model.saveImport()
-        model.editImport(0, confirmed = false)
+        model.resolveImport(0, replace = false) // Ignored while the outcome is uncertain.
         prepareOcr(model) // Re-entering the screen must not bypass the unresolved operation.
         runCurrent()
         assertEquals(drafts, model.state.value.imports)
@@ -330,12 +326,15 @@ class RecoveryViewModelTest {
         assertEquals(drafts, model.state.value.imports)
         assertEquals(1, writes)
         writeFailure = null
-        prepareOcr(model) // Explicit new review captures a fresh snapshot and uses the original confirmation policy.
+        prepareOcr(model) // Explicit new review captures a fresh snapshot: the committed day is now recognised as already saved.
+        runCurrent()
+        assertEquals(ImportStatus.UNCHANGED, model.state.value.imports.single().status)
         model.saveImport()
         runCurrent()
-        assertEquals(SaveOutcome.CONFIRMED, model.state.value.saveOutcome)
-        assertTrue(model.state.value.importSaved)
-        assertEquals(2, writes)
+        assertEquals(SaveOutcome.REJECTED, model.state.value.saveOutcome)
+        assertTrue(model.state.value.message!!.contains("No hay cambios"))
+        assertFalse(model.state.value.importSaved)
+        assertEquals(1, writes) // The uncertain write is never repeated, not even after reconciliation.
     }
 
     @Test fun ocrKnownRejectionPreservesDecisionsAndSuccessfulSaveIsConfirmed() = runTest(dispatcher) {
@@ -490,7 +489,7 @@ class RecoveryViewModelTest {
         runCurrent()
         assertEquals(SaveOutcome.CONFIRMED, model.state.value.saveOutcome)
         readFailure = IOException("Synthetic failed confirmation read")
-        prepareOcr(model, editDecisions = false)
+        prepareOcr(model)
         runCurrent()
         assertEquals(SaveOutcome.CONFIRMED, model.state.value.saveOutcome)
         assertTrue(model.state.value.message!!.contains("guardado se completó"))

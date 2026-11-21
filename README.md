@@ -2,19 +2,24 @@
 
 Aplicación Android nativa para organizar turnos programados en un calendario. Permite introducirlos manualmente o preparar propuestas desde una fotografía mediante OCR local, revisarlas y confirmar su guardado.
 
-**Versión 0.1.0 — versión inicial de portfolio.** No registra horas realmente trabajadas ni calcula nóminas. Requiere Android 8.0 (API 26) o superior. Notas de versión, instalación y límites: [RELEASE_NOTES_0.1.0.md](RELEASE_NOTES_0.1.0.md).
+**Versión 0.2.0 — rediseño de interfaz (en preparación, sin publicar).** No registra horas realmente trabajadas ni calcula nóminas reales: la única cifra económica es una estimación bruta con las tarifas configuradas actualmente. Requiere Android 8.0 (API 26) o superior. Notas de esta versión: [RELEASE_NOTES_0.2.0.md](RELEASE_NOTES_0.2.0.md); versión anterior: [RELEASE_NOTES_0.1.0.md](RELEASE_NOTES_0.1.0.md).
+
+> Los datos de 0.2.0 (días de vacaciones y baja médica) no son legibles por 0.1.0: no se admite volver a la versión anterior conservando esos datos.
 
 ## Funcionalidades
 
+- Dos pestañas: **Calendario** (calendario, resumen del mes, horas extras del mes y del año, estimación de nómina) y **Resumen** (vista por mes y año con selectores propios, desglose visual y extras declaradas). Ajustes e importación OCR se abren desde el icono de engranaje.
 - Calendario mensual y semanal, navegación entre meses/años y acceso a Hoy.
-- Días de trabajo, libres y sin configurar; detalle, edición y eliminación.
+- Días de trabajo, libres, **vacaciones**, **baja médica** y sin configurar; detalle, edición y eliminación. Vacaciones y baja médica se marcan por día o por rango de fechas, con confirmación cuando sustituyen turnos; se pueden quitar por periodo contiguo.
+- Contadores de horas normales (total menos extras declaradas), extras, total, días trabajados, libres, vacaciones y baja médica, por mes y por año natural (1 de enero a 31 de diciembre). Los días se asignan al mes de su fecha de inicio; las continuaciones nocturnas no se cuentan dos veces.
+- Estimación bruta de nómina: horas normales × tarifa base + extras × tarifa de hora extra (ambas opcionales en Ajustes). Si falta una tarifa, la cifra aparece como «No disponible». Siempre con la nota «Estimación con las tarifas actuales»: no es salario neto ni nómina histórica. Vacaciones y baja médica no generan ningún cálculo.
 - Turnos normales y partidos, con precisión de minutos y cruces de medianoche. Las continuaciones pertenecen al día de inicio y no duplican registros.
 - Extras declaradas por intervalo, incluidas en el total programado y mostradas también como subtotal. Los descansos entre intervalos no cuentan como trabajo.
 - Persistencia local sin exigir contrato ni tarifas para usar el calendario.
 - Photo Picker y selector de archivos Android, vista previa y ML Kit local.
 - Interpretación de tablas con trabajadores en filas y fechas en columnas. Coincidencia exacta y selección explícita mediante lista o sobre la fotografía.
 - Revisión y corrección manual antes de guardar, resolución de conflictos sin sobrescritura silenciosa y comprobación transaccional de cambios concurrentes.
-- Configuración opcional de perfil, contrato y cinco tarifas, sin motor salarial; tema claro/oscuro persistente.
+- Configuración opcional de perfil, contrato y seis tarifas (base, hora extra y cuatro pluses mostrados sin cálculo automático); tema claro/oscuro persistente con acento azul Material 3.
 
 ## Tecnologías y arquitectura
 
@@ -38,7 +43,7 @@ El OCR permanece provisional en memoria hasta confirmar los días. La planificac
 
 ## Capturas con datos ficticios
 
-Las imágenes proceden de la interfaz real de `verification`, con planificación sintética, sin fotografías laborales, identidades ni horarios personales. La fecha corresponde al mes de generación.
+**Capturas de 0.1.0, pendientes de regenerar con la interfaz de 0.2.0** (requieren un dispositivo o emulador y `PortfolioScreenshotsTest`). Las imágenes proceden de la interfaz real de `verification`, con planificación sintética, sin fotografías laborales, identidades ni horarios personales. La fecha corresponde al mes de generación.
 
 | Calendario | Detalle del día |
 | --- | --- |
@@ -108,12 +113,12 @@ Se prueban migraciones 1→4, 2→4 y 3→4, conservación de configuración, ed
 
 ## Limitaciones
 
-- OCR sensible a perspectiva extrema, texto pequeño, desenfoque y geometría incompleta. No se adivinan horas ni fechas. Límite: 2048 píxeles por lado y 20 MiB por imagen.
+- OCR sensible a perspectiva extrema, texto pequeño, desenfoque y geometría incompleta. No se adivinan horas ni fechas. Límite: 20 MiB por imagen; se procesan hasta 12 megapíxeles con la misma resolución en vertical y horizontal, y las imágenes pequeñas se amplían 2×. Una captura de pantalla muy alta con la tabla diminuta puede seguir siendo ilegible: amplía antes de capturar.
 - La estrategia semanal requiere siete fechas completas; la estrategia inicial admite otros diseños. No hay coincidencia aproximada automática de identidad.
 - `LIB` es libre; `VAC` es ausencia provisional no guardable en Room 4. Celdas ambiguas requieren corrección. El OCR no infiere extras por colores o anotaciones.
 - Precisión de minutos, desplazamientos de 0/1 día y máximo técnico de 24 horas por intervalo y sumadas por día de inicio; no son reglas laborales.
-- Totales nominales de planificación, sin resolver automáticamente cambios de horario de verano. Sin fichajes, notificaciones, PDF ni cálculos salariales.
-- Un perfil local, sin sincronización ni historial de vigencias de configuración.
+- Totales nominales de planificación, sin resolver automáticamente cambios de horario de verano. Sin fichajes, notificaciones ni PDF. La estimación de nómina es bruta, nominal y con las tarifas actuales; no aplica pluses, convenios, retenciones ni compensación de bajas o vacaciones.
+- Un perfil local, sin sincronización ni historial de vigencias de configuración: cambiar una tarifa cambia también la estimación de meses anteriores.
 - Cobertura manual limitada al formato probado y a un Samsung A53; pendiente una matriz de dispositivos y la evaluación de accesibilidad con TalkBack. El selector de fila sobre la fotografía tiene carencias de accesibilidad conocidas.
 
 ## Estado y documentación

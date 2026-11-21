@@ -14,13 +14,13 @@ class NavigationTest {
         compose.waitUntil(10000) {
             runCatching { compose.onAllNodes(hasText("Hoy")).fetchSemanticsNodes().isNotEmpty() }.getOrDefault(false)
         }
-        listOf("Horas extras", "Nómina", "Ajustes", "Calendario").forEach {
+        listOf("Resumen", "Calendario").forEach {
             compose.onNodeWithText(it).performClick()
             if (it == "Calendario") compose.onNodeWithText("Hoy").assertExists()
-            else if (it == "Horas extras") compose.onNodeWithText("Todavía no hay intervalos marcados como extras.").assertExists()
-            else compose.onNodeWithText("TurnoControl · $it").assertIsDisplayed()
+            else compose.onNodeWithText("Extras declaradas del mes").assertExists()
         }
-        compose.onNodeWithText("Ajustes").performClick()
+        compose.onNodeWithContentDescription("Ajustes").performClick()
+        compose.onNodeWithText("Perfil del trabajador").assertExists()
         // Replacing makes this test repeatable after the isolated restart fixture has run.
         compose.onNodeWithText("Nombre visible").performScrollTo().performTextReplacement("Perfil ficticio")
         compose.onNodeWithText("Horas pactadas").performScrollTo().performTextReplacement("60")
@@ -31,7 +31,14 @@ class NavigationTest {
         }
         compose.onNodeWithText("Calendario").performClick()
         compose.onNodeWithText("Hoy").assertExists()
-        compose.onNodeWithText("Ajustes").performClick()
+        // Regression: after visiting Ajustes, tab switches must not resurface the settings screen.
+        compose.onNodeWithContentDescription("Ajustes").performClick()
+        compose.onNodeWithText("Resumen").performClick()
+        compose.onNodeWithText("Extras declaradas del mes").assertExists()
+        compose.onNodeWithText("Calendario").performClick()
+        compose.onNodeWithText("Hoy").assertExists()
+        compose.onAllNodesWithText("Perfil del trabajador").assertCountEquals(0)
+        compose.onNodeWithContentDescription("Ajustes").performClick()
         compose.onNodeWithContentDescription("Tema oscuro").performScrollTo()
         if (compose.onNodeWithContentDescription("Tema oscuro").fetchSemanticsNode().config[SemanticsProperties.ToggleableState] == ToggleableState.Off) {
             compose.onNodeWithContentDescription("Tema oscuro").performClick()
@@ -40,7 +47,8 @@ class NavigationTest {
             compose.onNodeWithContentDescription("Tema oscuro").fetchSemanticsNode().config[SemanticsProperties.ToggleableState] == ToggleableState.On
         }
         compose.activityRule.scenario.recreate()
-        compose.onNodeWithText("Ajustes").performClick()
+        compose.onNodeWithText("Calendario").performClick()
+        compose.onNodeWithContentDescription("Ajustes").performClick()
         compose.onNodeWithContentDescription("Tema oscuro").assertIsOn()
         compose.onNodeWithText("Tarifa base EUR/h (opcional)").performScrollTo()
         // Activity recreation retains its ViewModel and the user's decimal separator.

@@ -7,7 +7,7 @@ import java.text.Normalizer
 import java.util.Locale
 
 enum class InterpretationStatus { READY, NEEDS_REVIEW, INCOMPLETE, CORRECTED }
-enum class DayKind { WORK, FREE, UNKNOWN }
+enum class DayKind { WORK, FREE, VACATION, SICK_LEAVE, UNKNOWN }
 enum class ProvisionalAbsence { VACATION }
 enum class ScheduleIssue(val message: String) {
     MISSING_DATE("Falta una fecha completa. Indica mes/año o corrige la fecha."),

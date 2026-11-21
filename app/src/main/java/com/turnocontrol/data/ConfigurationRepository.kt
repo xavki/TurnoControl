@@ -18,6 +18,7 @@ private val Context.preferences by preferencesDataStore("preferences")
 class ConfigurationRepository internal constructor(private val db: TurnoDatabase, private val preferences: DataStore<Preferences>) {
     @Inject constructor(db: TurnoDatabase, @ApplicationContext context: Context) : this(db, context.preferences)
     val profile = db.configuration().observeProfile()
+    val rates = db.configuration().observeRates().map { rules -> rules.associate { it.type to it.amountDecimal } }
     suspend fun load(profile: Profile): ConfigurationDraft {
         val contract = db.configuration().contract()
         val rates = db.configuration().rates()

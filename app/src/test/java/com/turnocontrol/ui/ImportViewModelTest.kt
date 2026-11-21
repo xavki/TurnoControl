@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import com.turnocontrol.data.*
 import com.turnocontrol.domain.OcrDocument
+import com.turnocontrol.domain.OcrRegion
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.*
 import org.junit.After
@@ -24,11 +25,22 @@ class ImportViewModelTest {
         var recognizeError: Exception? = null
         var gate: CompletableDeferred<Unit>? = null
         var text = "PRUEBA OCR"
+        /** Clockwise angle at which the text appears in the unrotated image; null means no line angles. */
+        var contentAngle: Float? = null
+        /** Simulates a correction that fails to straighten the text. */
+        var rotationHelps = true
+        val rotations = mutableListOf<Int>()
         override suspend fun load(uri: Uri): ImportedImage { loadError?.let { throw it }; return image }
         override suspend fun recognize(image: ImportedImage): OcrDocument {
             gate?.await()
             recognizeError?.let { throw it }
-            return OcrDocument(text, 2, 2, emptyList())
+            val angle = contentAngle?.let { a -> if (rotationHelps) ((a + image.rotation + 180) % 360) - 180 else a }
+            return OcrDocument(text, 2, 2, listOf(OcrRegion(text, null, emptyList(), "es", children = listOf(
+                OcrRegion("LUNES 08:00-16:00 MARTES LIBRE MIERCOLES", null, emptyList(), "es", .9f, angle)))))
+        }
+        override suspend fun rotate(image: ImportedImage, degrees: Int): ImportedImage {
+            rotations += degrees
+            return image.copy(rotation = Math.floorMod(image.rotation + degrees, 360))
         }
     }
     @Before fun setup() { Dispatchers.setMain(dispatcher) }
@@ -98,5 +110,45 @@ class ImportViewModelTest {
         model.select(uri); advanceUntilIdle()
         assertFalse(model.state.value.loading)
         assertTrue(model.state.value.message!!.contains("Vuelve a seleccionarla"))
+    }
+
+    @Test fun sidewaysTextIsRotatedAutomaticallyOnceAndReported() = runTest(dispatcher) {
+        val fake = Fake(image).apply { contentAngle = 90f }
+        val model = ImportViewModel(fake)
+        model.select(uri); advanceUntilIdle()
+        assertEquals(listOf(270), fake.rotations)
+        assertEquals(270, model.state.value.image!!.rotation)
+        assertEquals(270, model.state.value.autoRotation)
+        assertTrue(model.state.value.message!!.contains("Orientación corregida"))
+    }
+
+    @Test fun uprightTextIsNotRotatedAndUnhelpfulCorrectionIsDiscarded() = runTest(dispatcher) {
+        val upright = Fake(image).apply { contentAngle = 0f }
+        ImportViewModel(upright).apply { select(uri); advanceUntilIdle() }
+        assertTrue(upright.rotations.isEmpty())
+        val stubborn = Fake(image).apply { contentAngle = 180f; rotationHelps = false }
+        val model = ImportViewModel(stubborn)
+        model.select(uri); advanceUntilIdle()
+        assertEquals(listOf(180), stubborn.rotations)
+        assertEquals(0, model.state.value.image!!.rotation)
+        assertEquals(0, model.state.value.autoRotation)
+    }
+
+    @Test fun manualRotationRerunsOcrAndKeepsPreviousResultOnFailure() = runTest(dispatcher) {
+        val fake = Fake(image)
+        val model = ImportViewModel(fake)
+        model.select(uri); advanceUntilIdle()
+        model.rotate(90); advanceUntilIdle()
+        assertEquals(90, model.state.value.image!!.rotation)
+        assertNotNull(model.state.value.document)
+        model.rotate(-90); advanceUntilIdle()
+        assertEquals(0, model.state.value.image!!.rotation)
+        assertEquals(listOf(90, -90), fake.rotations)
+        val before = model.state.value
+        fake.recognizeError = IllegalStateException("Synthetic failure")
+        model.rotate(90); advanceUntilIdle()
+        assertEquals(before.image, model.state.value.image)
+        assertEquals(before.document, model.state.value.document)
+        assertTrue(model.state.value.message!!.contains("No se pudo"))
     }
 }

@@ -36,21 +36,33 @@ fun ImportScreen(model: ImportViewModel, onSourceChanged: () -> Unit, review: (O
         Button(enabled = !state.loading, onClick = { launchPicker { gallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) } }) { Text("Seleccionar de galería") }
         OutlinedButton(enabled = !state.loading, onClick = { launchPicker { files.launch(arrayOf("image/*")) } }) { Text("Seleccionar archivo") }
         Text("Usa una imagen guardada en el dispositivo. Un proveedor de archivos en la nube puede descargarla al seleccionarla. TurnoControl no tiene acceso a Internet.")
-        Text("Hasta 20 MiB. Las imágenes grandes se reducen a un máximo de 2048 píxeles por lado para limitar la memoria.")
+        Text("Hasta 20 MiB. Las fotos vertical y horizontal se procesan con la misma resolución (hasta 12 megapíxeles); las imágenes pequeñas se amplían para mejorar el reconocimiento.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.loading) CircularProgressIndicator()
         pickerError?.let { Text(it) }
         state.message?.let { Text(it) }
         state.image?.let { image ->
             Image(image.bitmap.asImageBitmap(), contentDescription = "Vista previa de la imagen seleccionada",
                 modifier = Modifier.fillMaxWidth().height(280.dp), contentScale = ContentScale.Fit)
-            Text("Vista previa: ${image.bitmap.width} × ${image.bitmap.height} px")
+            Text("Si el texto no aparece derecho, gira la imagen. Se reconoce de nuevo y la foto original no se modifica.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { onSourceChanged(); model.rotate(-90) }, enabled = !state.loading, modifier = Modifier.weight(1f)) {
+                    Icon(TurnoIcons.RotateLeft, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Girar a la izquierda")
+                }
+                OutlinedButton(onClick = { onSourceChanged(); model.rotate(90) }, enabled = !state.loading, modifier = Modifier.weight(1f)) {
+                    Icon(TurnoIcons.RotateRight, contentDescription = null, modifier = Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Girar a la derecha")
+                }
+            }
+            Text("Vista previa: ${image.bitmap.width} × ${image.bitmap.height} px" + if (image.rotation != 0) " · girada ${image.rotation}°" else "",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         state.document?.let { document ->
             Text("Texto reconocido", style = MaterialTheme.typography.titleMedium)
             if (document.text.isNotBlank()) SelectionContainer { Text(document.text) }
             Text("${document.blocks.size} bloques · ${document.blocks.sumOf { it.children.size }} líneas. Coordenadas conservadas respecto a la vista previa.")
             Text("El OCR puede contener errores. Revisa el texto antes de interpretar únicamente al trabajador elegido.")
-            if (document.text.isNotBlank()) Button(onClick = { review(document) }) { Text("Revisar turnos del trabajador") }
+            if (document.text.isNotBlank()) Button(onClick = { review(document) }, enabled = !state.loading) { Text("Revisar turnos del trabajador") }
         }
         if (state.loading || state.image != null || state.document != null) {
             OutlinedButton(onClick = { pickerError = null; onSourceChanged(); model.clear() }) { Text(if (state.loading) "Cancelar reconocimiento" else "Descartar imagen y texto") }

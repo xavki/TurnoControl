@@ -9,7 +9,14 @@ fun ProvisionalInterval.durationMinutes() = PlannedScheduleValidator.end(this) -
 fun PlannedDay.totalMinutes() = intervals.sumOf { it.durationMinutes() }
 fun PlannedDay.extraMinutes() = intervals.filter { it.isExtra }.sumOf { it.durationMinutes() }
 fun PlannedDay.breakMinutes(): Int = intervals.sortedBy(PlannedScheduleValidator::start).zipWithNext().sumOf { (a, b) -> (PlannedScheduleValidator.start(b) - PlannedScheduleValidator.end(a)).coerceAtLeast(0) }
+fun PlannedDay.regularMinutes() = totalMinutes() - extraMinutes()
+fun PlannedDay.firstInterval() = intervals.minByOrNull(PlannedScheduleValidator::start)
+fun PlannedDay.lastInterval() = intervals.maxByOrNull(PlannedScheduleValidator::end)
 fun minutesLabel(minutes: Int) = "${minutes / 60} h ${minutes % 60} min"
+
+val DayKind.label: String get() = when (this) {
+    DayKind.WORK -> "Trabajo"; DayKind.FREE -> "Libre"; DayKind.VACATION -> "Vacaciones"; DayKind.SICK_LEAVE -> "Baja médica"; DayKind.UNKNOWN -> "Sin configurar"
+}
 
 object PlannedScheduleValidator {
     const val MAX_DAY_MINUTES = 24 * 60
@@ -18,7 +25,7 @@ object PlannedScheduleValidator {
     fun validate(days: List<PlannedDay>): String? {
         if (days.map { it.date }.distinct().size != days.size) return "Hay fechas duplicadas. Revisa los días antes de guardar."
         for (day in days) {
-            if (day.kind == DayKind.UNKNOWN || (day.kind == DayKind.FREE && day.intervals.isNotEmpty()) || (day.kind == DayKind.WORK && day.intervals.isEmpty())) return "Un día debe ser libre explícito o contener intervalos válidos."
+            if (day.kind == DayKind.UNKNOWN || (day.kind != DayKind.WORK && day.intervals.isNotEmpty()) || (day.kind == DayKind.WORK && day.intervals.isEmpty())) return "Un día debe ser libre, de vacaciones o de baja sin intervalos, o contener intervalos válidos."
             val ordered = day.intervals.sortedBy(::start)
             if (ordered.isNotEmpty() && ordered.first().startDayOffset != 0) return "El turno pertenece al día en que empieza."
             if (ordered.any { it.start.second != 0 || it.end.second != 0 || it.start.nano != 0 || it.end.nano != 0 || it.startDayOffset !in 0..1 || it.endDayOffset !in 0..1 || end(it) <= start(it) || end(it) - start(it) > MAX_DAY_MINUTES }) return "Duración inválida: cada intervalo debe durar entre 1 minuto y 24 horas."

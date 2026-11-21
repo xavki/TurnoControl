@@ -17,6 +17,7 @@ interface ConfigurationDao {
     @Query("SELECT * FROM Contract WHERE id = 1") suspend fun contract(): Contract?
     @Query("SELECT * FROM PayRule WHERE id = 1") suspend fun rate(): PayRule?
     @Query("SELECT * FROM PayRule WHERE profileId = 1 ORDER BY id") suspend fun rates(): List<PayRule>
+    @Query("SELECT * FROM PayRule WHERE profileId = 1 ORDER BY id") fun observeRates(): Flow<List<PayRule>>
     @Upsert suspend fun putProfile(profile: Profile)
     @Upsert suspend fun putContract(contract: Contract)
     @Upsert suspend fun putRate(rate: PayRule)

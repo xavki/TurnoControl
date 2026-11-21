@@ -1,8 +1,9 @@
-@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.turnocontrol.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -15,15 +16,23 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.turnocontrol.data.planned
 import com.turnocontrol.domain.*
+import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+
+private val spanish = Locale.forLanguageTag("es")
+private fun LocalDate.short() = format(DateTimeFormatter.ofPattern("d MMM", spanish))
 
 @Composable
 fun DayDetailScreen(model: CalendarViewModel, back: () -> Unit) {
     val state by model.state.collectAsStateWithLifecycle()
     val date = state.selected
     var action by remember(date) { mutableStateOf<String?>(null) }
+    var absence by remember(date) { mutableStateOf<DayKind?>(null) }
     val day = state.days.firstOrNull { it.day.date == date.toString() }?.planned()
+    val kind = day?.kind ?: DayKind.UNKNOWN
+    val isAbsence = kind == DayKind.VACATION || kind == DayKind.SICK_LEAVE
+    val tint = kind.tint(MaterialTheme.colorScheme, MaterialTheme.turno)
     Scaffold(containerColor = MaterialTheme.colorScheme.background, bottomBar = {
         Surface(color = MaterialTheme.colorScheme.background) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), horizontalArrangement = Arrangement.End) {
@@ -34,22 +43,42 @@ fun DayDetailScreen(model: CalendarViewModel, back: () -> Unit) {
         }
     }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            TextButton(onClick = { model.closeEditor(); back() }, enabled = !state.busy) { Text("Volver al calendario") }
-            Text(date?.format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM yyyy", Locale.forLanguageTag("es"))) ?: "Selecciona un día", style = MaterialTheme.typography.headlineSmall)
-            Surface(color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.small) {
-                Text(when (day?.kind) { DayKind.WORK -> "Trabajo"; DayKind.FREE -> "Libre"; else -> "Sin configurar" },
-                    style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+            TextButton(onClick = { model.closeEditor(); back() }, enabled = !state.busy, contentPadding = PaddingValues(0.dp)) { Text("Volver al calendario") }
+            Text(date?.format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM yyyy", spanish)) ?: "Selecciona un día", style = MaterialTheme.typography.headlineSmall)
+            Surface(color = tint.copy(alpha = 0.14f), shape = MaterialTheme.shapes.small) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    kind.icon()?.let { Icon(it, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp)) }
+                    Text(kind.label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+                }
             }
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            day?.let {
-                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()) {
+            day?.takeIf { it.kind == DayKind.WORK }?.let {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Programadas: ${minutesLabel(it.totalMinutes())}", style = MaterialTheme.typography.titleLarge)
                         Text("Extras declaradas: ${minutesLabel(it.extraMinutes())} · incluidas en el total", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        val first = it.firstInterval()!!
+                        val last = it.lastInterval()!!
+                        DetailRow("Entrada", "${first.start}${if (first.startDayOffset == 1) " · día siguiente" else ""}")
+                        DetailRow("Salida", "${last.end}${if (last.endDayOffset == 1) " · día siguiente" else ""}")
+                        DetailRow("Descansos", minutesLabel(it.breakMinutes()))
+                        DetailRow("Horas normales", minutesLabel(it.regularMinutes()))
+                        DetailRow("Horas extras", minutesLabel(it.extraMinutes()))
                     }
                 }
             }
-            if (day == null) Text("Añade los intervalos de este día o márcalo como libre.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (isAbsence && date != null) {
+                val period = model.contiguousPeriod(date, kind)
+                Card(colors = CardDefaults.cardColors(containerColor = tint.copy(alpha = 0.10f)), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Día de ${kind.label.lowercase(spanish)} · sin horas", style = MaterialTheme.typography.titleMedium)
+                        Text(if (period.start == period.endInclusive) "Un solo día" else "Periodo: ${period.start.short()} – ${period.endInclusive.short()}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("No cuenta como horas, libre ni ${if (kind == DayKind.VACATION) "baja médica" else "vacaciones"}. Sin cálculo salarial.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            if (day == null) Text("Añade los intervalos de este día o márcalo como libre, vacaciones o baja médica.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             state.days.forEach { stored ->
                 val other = stored.planned()
                 other.intervals.filter { i -> date != null && other.date < date && other.date.plusDays(i.endDayOffset.toLong()) == date && PlannedScheduleValidator.end(i) > 1440 }.forEach { i ->
@@ -79,20 +108,85 @@ fun DayDetailScreen(model: CalendarViewModel, back: () -> Unit) {
             if (date != null) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Text("Opciones del día", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = { if (day?.kind == DayKind.WORK) action = "free" else model.markFree() }, enabled = !state.busy && state.editorReady) { Text("Marcar libre") }
-                if (day != null) TextButton(onClick = { action = "day" }, enabled = !state.busy && state.editorReady) { Text("Eliminar día") }
-                if (state.message != null || state.saveOutcome == SaveOutcome.UNKNOWN) TextButton(onClick = { model.select(date) }, enabled = !state.busy) { Text("Recargar día") }
+                val canEdit = !state.busy && state.editorReady
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { if (kind == DayKind.WORK) action = "free" else model.markFree() }, enabled = canEdit) { Text("Marcar libre") }
+                    TextButton(onClick = { absence = DayKind.VACATION }, enabled = canEdit) { Text("Marcar vacaciones") }
+                    TextButton(onClick = { absence = DayKind.SICK_LEAVE }, enabled = canEdit) { Text("Marcar baja médica") }
+                    if (isAbsence) TextButton(onClick = { action = "clear" }, enabled = canEdit) { Text("Quitar ${kind.label.lowercase(spanish)} del periodo") }
+                    if (day != null) TextButton(onClick = { action = "day" }, enabled = canEdit) { Text("Eliminar día") }
+                    if (state.message != null || state.saveOutcome == SaveOutcome.UNKNOWN) TextButton(onClick = { model.select(date) }, enabled = !state.busy) { Text("Recargar día") }
+                }
             }
             Text("Planificación · no son fichajes reales", style = MaterialTheme.typography.labelMedium)
         }
     }
-    action?.let { pending -> AlertDialog(onDismissRequest = { action = null }, title = { Text(if (pending == "free") "¿Sustituir turnos por libre?" else "¿Eliminar registro?") },
-        text = { Text("La continuación de un turno iniciado otro día se conserva.") }, confirmButton = { TextButton(onClick = {
-            when { pending == "free" -> model.markFree(); pending == "day" -> model.deleteDay(); else -> model.deleteInterval(pending.substringAfter(':').toInt()) }; action = null
-        }) { Text("Confirmar cambio") } }, dismissButton = { TextButton(onClick = { action = null }) { Text("Cancelar cambio") } }) }
+    action?.let { pending ->
+        val period = if (pending == "clear" && date != null) model.contiguousPeriod(date, kind) else null
+        AlertDialog(onDismissRequest = { action = null },
+            title = { Text(when (pending) { "free" -> "¿Sustituir turnos por libre?"; "clear" -> "¿Quitar el periodo del ${period!!.start.short()} al ${period.endInclusive.short()}?"; else -> "¿Eliminar registro?" }) },
+            text = { Text(if (pending == "clear") "Los días del periodo quedarán sin configurar." else "La continuación de un turno iniciado otro día se conserva.") },
+            confirmButton = { TextButton(onClick = {
+                when (pending) { "free" -> model.markFree(); "day" -> model.deleteDay(); "clear" -> model.clearPeriod(); else -> model.deleteInterval(pending.substringAfter(':').toInt()) }; action = null
+            }) { Text("Confirmar cambio") } }, dismissButton = { TextButton(onClick = { action = null }) { Text("Cancelar cambio") } })
+    }
+    absence?.let { AbsenceDialog(it, model, state) { absence = null } }
     if (state.emptyChoice) AlertDialog(onDismissRequest = model::cancelEmptyChoice, title = { Text("Último intervalo") }, text = { Text("¿Cómo quieres dejar este día?") },
         confirmButton = { TextButton(onClick = model::deleteDay) { Text("Sin configurar") } }, dismissButton = { TextButton(onClick = model::markFree) { Text("Libre") } })
     state.editor?.takeUnless { state.editorHidden }?.let { editor -> ShiftEditorDialog(model, editor, state) }
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+private const val DAY_MILLIS = 86_400_000L
+
+@Composable
+private fun AbsenceDialog(kind: DayKind, model: CalendarViewModel, state: CalendarState, dismiss: () -> Unit) {
+    val start = state.selected ?: return
+    var range by remember { mutableStateOf(false) }
+    var end by remember { mutableStateOf<LocalDate?>(null) }
+    var picker by remember { mutableStateOf(false) }
+    val label = kind.label.lowercase(spanish)
+    val preview = model.rangePreview(kind, if (range) end ?: start else start)
+    val editable = !state.busy && state.reconciliation == null
+    AlertDialog(onDismissRequest = dismiss, title = { Text("Marcar $label") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(false to "Solo este día", true to "Hasta una fecha…").forEach { (value, text) ->
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(selected = range == value, onClick = { range = value }, role = Role.RadioButton), verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = range == value, onClick = null)
+                        Text(text, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                if (range) OutlinedButton(onClick = { picker = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(end?.let { "Fecha final · ${it.format(DateTimeFormatter.ofPattern("d MMM yyyy", spanish))}" } ?: "Elegir fecha final")
+                }
+                if (!range || end != null) {
+                    Text("Se marcarán ${preview.days} ${if (preview.days == 1) "día" else "días"} como $label", style = MaterialTheme.typography.bodyMedium)
+                    if (preview.replaced > 0) Text("${preview.replaced} ${if (preview.replaced == 1) "día" else "días"} con turnos, libres o de otro tipo se sustituirán", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                }
+                Text("Sin horas ni cálculo salarial. Las continuaciones de otro día se conservan.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
+        confirmButton = { TextButton(enabled = editable && (!range || end != null), onClick = {
+            if (range) model.markRange(kind, end!!) else model.markKind(kind)
+            dismiss()
+        }) { Text("Confirmar cambio") } },
+        dismissButton = { TextButton(onClick = dismiss) { Text("Cancelar cambio") } })
+    if (picker) {
+        val minMillis = start.toEpochDay() * DAY_MILLIS
+        val pickerState = rememberDatePickerState(initialSelectedDateMillis = (end ?: start).toEpochDay() * DAY_MILLIS,
+            selectableDates = object : SelectableDates { override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis >= minMillis })
+        DatePickerDialog(onDismissRequest = { picker = false },
+            confirmButton = { TextButton(onClick = { pickerState.selectedDateMillis?.let { end = LocalDate.ofEpochDay(it / DAY_MILLIS) }; picker = false }) { Text("Aceptar fecha") } },
+            dismissButton = { TextButton(onClick = { picker = false }) { Text("Cancelar fecha") } }) { DatePicker(state = pickerState) }
+    }
 }
 
 @Composable

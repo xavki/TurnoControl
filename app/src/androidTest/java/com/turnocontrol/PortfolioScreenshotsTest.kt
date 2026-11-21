@@ -63,9 +63,9 @@ class PortfolioScreenshotsTest {
             capture("shift-editor.png")
             compose.onNodeWithText("Cancelar registro").performClick()
             compose.onNodeWithText("Volver al calendario").performScrollTo().performClick()
-            compose.onNodeWithText("Horas extras").performClick()
-            compose.onNodeWithText("5 h 0 min").assertExists()
-            capture("extra-hours.png")
+            compose.onNodeWithText("Resumen").performClick()
+            compose.onAllNodesWithText("5 h 0 min").onFirst().assertExists()
+            capture("summary.png")
         } finally {
             runBlocking {
                 val current = repo.snapshot()
