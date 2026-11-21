@@ -48,16 +48,21 @@ class ImportViewModel @Inject constructor(private val ocr: ImageOcr) : ViewModel
                 ensureActive()
                 var shown = image
                 var auto = 0
+                var rotationSkipped: String? = null
                 val correction = document.uprightCorrection()
                 if (correction != 0) {
                     mutable.value = ImportState(image = image, loading = true, message = "El texto aparece girado. Corrigiendo la orientación…")
-                    val rotated = ocr.rotate(image, correction)
-                    val again = ocr.recognize(rotated)
-                    ensureActive()
-                    // Keep the correction only if the text is now horizontal; otherwise the user decides manually.
-                    if (again.uprightCorrection() == 0 && again.text.isNotBlank()) { shown = rotated; document = again; auto = correction }
+                    // A refused rotation (not enough memory) keeps the original image and its OCR.
+                    val rotated = try { ocr.rotate(image, correction) } catch (e: ImageImportException) { rotationSkipped = e.message; null }
+                    if (rotated != null) {
+                        val again = ocr.recognize(rotated)
+                        ensureActive()
+                        // Keep the correction only if the text is now horizontal; otherwise the user decides manually.
+                        if (again.uprightCorrection() == 0 && again.text.isNotBlank()) { shown = rotated; document = again; auto = correction }
+                    }
                 }
                 mutable.value = ImportState(shown, document, autoRotation = auto, message = when {
+                    rotationSkipped != null -> "El texto aparece girado, pero no se pudo corregir automáticamente: $rotationSkipped"
                     document.text.isBlank() -> "No se ha detectado texto. Prueba una imagen más nítida, bien orientada y con mayor contraste, o gírala."
                     auto != 0 -> "Orientación corregida automáticamente (giro de $auto°). Si no es correcta, gira la imagen manualmente."
                     else -> null

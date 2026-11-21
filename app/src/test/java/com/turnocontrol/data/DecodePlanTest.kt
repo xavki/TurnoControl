@@ -36,4 +36,32 @@ class DecodePlanTest {
         assertTrue(ow <= LocalImageOcr.MAX_EDGE)
         assertTrue(oh > 0)
     }
+
+    private val ample = 2L * 1024 * 1024 * 1024
+    private fun peak(w: Int, h: Int, encoded: Long, plan: DecodePlan) = encoded + 4 * (plan.decodedPixels(w, h) + plan.outputPixels(w, h))
+
+    @Test fun ampleMemoryKeepsThePortraitAndLandscapeBehaviourExactly() {
+        for ((w, h) in listOf(4000 to 3000, 3000 to 4000, 1200 to 1600, 1080 to 2340, 9248 to 6936)) {
+            assertEquals("$w×$h", decodePlan(w, h), memoryAwarePlan(w, h, 5_000_000, ample, lowRam = false))
+        }
+    }
+
+    @Test fun lowMemoryShrinksTheBudgetUntilThePeakFits() {
+        val available = 160L * 1024 * 1024
+        val plan = memoryAwarePlan(4000, 3000, 6_000_000, available, lowRam = false)!!
+        assertTrue(peak(4000, 3000, 6_000_000, plan) <= available / 4)
+        assertTrue("still readable", plan.outputPixels(4000, 3000) >= LocalImageOcr.MIN_PIXELS / 2)
+        assertTrue(plan.outputPixels(4000, 3000) < 4000L * 3000)
+    }
+
+    @Test fun refusesInsteadOfProducingAnUnreadableBitmap() {
+        assertNull(memoryAwarePlan(4000, 3000, 6_000_000, 24L * 1024 * 1024, lowRam = false))
+        assertNull(memoryAwarePlan(9248, 6936, 20_000_000, 40L * 1024 * 1024, lowRam = false))
+    }
+
+    @Test fun lowRamDevicesAreCappedAtHalfTheBudget() {
+        val plan = memoryAwarePlan(4000, 3000, 5_000_000, ample, lowRam = true)!!
+        assertTrue(plan.outputPixels(4000, 3000) <= LocalImageOcr.LOW_RAM_MAX_PIXELS)
+        assertTrue(plan.outputPixels(4000, 3000) >= LocalImageOcr.LOW_RAM_MAX_PIXELS / 2)
+    }
 }

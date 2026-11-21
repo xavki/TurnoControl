@@ -30,6 +30,7 @@ class ImportViewModelTest {
         /** Simulates a correction that fails to straighten the text. */
         var rotationHelps = true
         val rotations = mutableListOf<Int>()
+        var rotateError: Exception? = null
         override suspend fun load(uri: Uri): ImportedImage { loadError?.let { throw it }; return image }
         override suspend fun recognize(image: ImportedImage): OcrDocument {
             gate?.await()
@@ -40,6 +41,7 @@ class ImportViewModelTest {
         }
         override suspend fun rotate(image: ImportedImage, degrees: Int): ImportedImage {
             rotations += degrees
+            rotateError?.let { throw it }
             return image.copy(rotation = Math.floorMod(image.rotation + degrees, 360))
         }
     }
@@ -150,5 +152,29 @@ class ImportViewModelTest {
         assertEquals(before.image, model.state.value.image)
         assertEquals(before.document, model.state.value.document)
         assertTrue(model.state.value.message!!.contains("No se pudo"))
+    }
+
+    @Test fun refusedAutomaticRotationKeepsTheOriginalImageAndOcr() = runTest(dispatcher) {
+        val fake = Fake(image).apply { contentAngle = 90f; rotateError = ImageImportException("No hay memoria suficiente para girar la imagen.") }
+        val model = ImportViewModel(fake)
+        model.select(uri); advanceUntilIdle()
+        assertNotNull(model.state.value.image)
+        assertNotNull(model.state.value.document)
+        assertEquals(0, model.state.value.image!!.rotation)
+        assertEquals(0, model.state.value.autoRotation)
+        assertTrue(model.state.value.message!!.contains("no se pudo corregir"))
+        assertFalse(model.state.value.loading)
+    }
+
+    @Test fun refusedManualRotationKeepsTheCurrentImage() = runTest(dispatcher) {
+        val fake = Fake(image)
+        val model = ImportViewModel(fake)
+        model.select(uri); advanceUntilIdle()
+        val before = model.state.value
+        fake.rotateError = ImageImportException("No hay memoria suficiente para girar la imagen. Se conserva la imagen actual.")
+        model.rotate(90); advanceUntilIdle()
+        assertEquals(before.image, model.state.value.image)
+        assertEquals(before.document, model.state.value.document)
+        assertTrue(model.state.value.message!!.contains("Se conserva"))
     }
 }

@@ -18,7 +18,6 @@ Ninguno de estos puntos se ha clasificado como P0 ni P1. Origen: lectura de cód
 - El inicio de semana está fijado en lunes, sin atender a la configuración regional.
 - Los borradores de edición y de revisión OCR se pierden si el sistema mata el proceso (sin `SavedStateHandle`).
 - Tras guardar una importación, la pantalla de revisión conserva los borradores hasta una nueva importación.
-- `ImageOcr.load` no captura `OutOfMemoryError` con imágenes muy grandes.
 
 ## Pruebas y entorno
 - Ejecutar la suite instrumentada de 0.2.0 (`connectedVerificationAndroidTest`) en un dispositivo o emulador y regenerar las capturas con `PortfolioScreenshotsTest`: en la preparación de 0.2.0 solo se compiló.
