@@ -89,6 +89,20 @@ class CalendarViewModel internal constructor(
             }
         }
     }
+    /** After a restore every open draft, snapshot and import proposal refers to replaced data: drop them. */
+    fun resetAfterRestore() {
+        expected = emptyList(); importExpected = emptyList()
+        mutable.update { it.copy(selected = null, editor = null, editorReady = false, editorHidden = false, emptyChoice = false, imports = emptyList(),
+            importReady = false, importSaved = false, reconciliation = null, needsReconciliation = false, saveOutcome = SaveOutcome.NONE, message = null) }
+    }
+    /** A restore must not race an in-flight write or an unresolved uncertain save. */
+    fun restoreBlockedReason(): String? = state.value.let {
+        when {
+            it.busy -> "Espera a que termine la operación del calendario antes de restaurar."
+            it.reconciliation != null || it.saveOutcome == SaveOutcome.UNKNOWN && it.needsReconciliation -> "Hay un guardado con resultado incierto: revísalo en el calendario antes de restaurar."
+            else -> null
+        }
+    }
     fun moveMonth(delta: Long) { mutable.update {
         val target = it.month.plusMonths(delta)
         it.copy(month = target, focused = target.atDay(it.focused.dayOfMonth.coerceAtMost(target.lengthOfMonth())))

@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
     private val calendarModel: CalendarViewModel by viewModels()
     private val summaryModel: SummaryViewModel by viewModels()
     private val startupModel: StartupViewModel by viewModels()
+    private val backupModel: BackupViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -34,7 +35,13 @@ class MainActivity : ComponentActivity() {
                 when (val gate = startup) {
                     StartupState.Checking -> StartupCheckingScreen()
                     is StartupState.Blocked -> IncompatibleDataScreen(gate.reasons, startupModel::retry)
-                    StartupState.Ready -> TurnoApp(model, importModel, reviewModel, calendarModel, summaryModel)
+                    is StartupState.Recovery -> InterruptedRestoreScreen(gate, startupModel::keepCurrentData, startupModel::restoreSafetyCopy, startupModel::acknowledge)
+                    StartupState.Ready -> {
+                        val backup by backupModel.state.collectAsStateWithLifecycle()
+                        // A completed restore replaced every row: reload the configuration draft and drop calendar/OCR drafts.
+                        LaunchedEffect(backup.restored) { if (backup.restored > 0) { model.reload(); calendarModel.resetAfterRestore(); reviewModel.clear(); importModel.clear() } }
+                        TurnoApp(model, importModel, reviewModel, calendarModel, summaryModel, backupModel)
+                    }
                 }
             }
         }
@@ -44,7 +51,7 @@ class MainActivity : ComponentActivity() {
 private val tabs = listOf("Calendario" to TurnoIcons.Calendar, "Resumen" to TurnoIcons.Summary)
 
 @Composable
-fun TurnoApp(model: ConfigurationViewModel, importModel: ImportViewModel, reviewModel: ScheduleReviewViewModel, calendarModel: CalendarViewModel, summaryModel: SummaryViewModel) {
+fun TurnoApp(model: ConfigurationViewModel, importModel: ImportViewModel, reviewModel: ScheduleReviewViewModel, calendarModel: CalendarViewModel, summaryModel: SummaryViewModel, backupModel: BackupViewModel? = null) {
     val state by model.state.collectAsStateWithLifecycle()
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
@@ -71,7 +78,11 @@ fun TurnoApp(model: ConfigurationViewModel, importModel: ImportViewModel, review
                 if (detailState.selected == null) LaunchedEffect(Unit) { backToCalendar() }
                 else DayDetailScreen(calendarModel, backToCalendar)
             }
-            composable("Ajustes") { SettingsScreen(model, state, onImport = { nav.navigate("Importar") }, onBack = { nav.popBackStack() }) }
+            composable("Ajustes") {
+                val calendarState by calendarModel.state.collectAsStateWithLifecycle()
+                SettingsScreen(model, state, onImport = { nav.navigate("Importar") }, onBack = { nav.popBackStack() },
+                    backup = backupModel, restoreBlockedReason = calendarState.let { calendarModel.restoreBlockedReason() })
+            }
             composable("Importar") { ImportScreen(importModel, reviewModel::clear, { document ->
                 reviewModel.prepare(document, state.draft.name, state.draft.alias)
                 nav.navigate("Revisar")

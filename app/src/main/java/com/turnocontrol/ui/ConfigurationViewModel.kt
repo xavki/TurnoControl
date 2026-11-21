@@ -40,7 +40,10 @@ class ConfigurationViewModel @Inject constructor(private val repository: Configu
         try { repository.setDarkTheme(enabled) }
         catch (e: IOException) { mutable.update { it.copy(message = "No se pudo guardar la preferencia.") } }
     } }
-    init { viewModelScope.launch {
+    init { reload() }
+    /** Also called after a restore: a stale draft saved later would overwrite the restored configuration. */
+    fun reload() { viewModelScope.launch {
+        mutable.update { it.copy(loading = true) }
         try {
             val profile = repository.profile.first()
             mutable.value = ConfigurationState(draft = profile?.let { repository.load(it) } ?: ConfigurationDraft(), loading = false, configured = profile != null)

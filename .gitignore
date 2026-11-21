@@ -48,8 +48,9 @@ __pycache__/
 hs_err_pid*
 *.hprof
 # Backups made with the app's own export feature (may contain personal schedules).
-*.turnocontrol-backup
-*.turnocontrol-backup.json
+turnocontrol-backup-*.json
+pre-restore.json
+restore-target.json
 # Private technical reports and internal planning notes.
 INFORME_*.md
 docs/superpowers/

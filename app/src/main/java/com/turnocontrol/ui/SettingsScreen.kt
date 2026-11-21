@@ -9,8 +9,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -29,14 +31,62 @@ fun TurnoTopBar(title: String, onSettings: (() -> Unit)? = null, onBack: (() -> 
 }
 
 @Composable
-fun SettingsScreen(model: ConfigurationViewModel, state: ConfigurationState, onImport: () -> Unit, onBack: () -> Unit) {
+fun SettingsScreen(model: ConfigurationViewModel, state: ConfigurationState, onImport: () -> Unit, onBack: () -> Unit,
+    backup: BackupViewModel? = null, restoreBlockedReason: String? = null) {
     Column(Modifier.fillMaxSize()) {
         TurnoTopBar("Ajustes", onBack = onBack)
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             OutlinedButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("Importar horario") }
             ConfigurationForm(state, model)
+            backup?.let { BackupSection(it, restoreBlockedReason) }
         }
     }
+}
+
+@Composable
+private fun BackupSection(model: BackupViewModel, restoreBlockedReason: String?) {
+    val state by model.state.collectAsStateWithLifecycle()
+    val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { model.exportTo(it) }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { model.pick(it) }
+    HorizontalDivider()
+    Text("Copia de seguridad", style = MaterialTheme.typography.titleMedium)
+    Text("Guarda perfil, contrato, tarifas, días, turnos y apariencia en un archivo que tú eliges. Todo ocurre en el dispositivo, sin Internet. " +
+        "El archivo contiene tus horarios: guárdalo en un lugar privado.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Button(onClick = { exporter.launch(model.suggestedName()) }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Exportar copia de seguridad") }
+    OutlinedButton(onClick = { picker.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, enabled = !state.busy && restoreBlockedReason == null,
+        modifier = Modifier.fillMaxWidth()) { Text("Restaurar desde una copia") }
+    restoreBlockedReason?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+    if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+    state.message?.let { Text(it, color = if (state.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface) }
+    state.preview?.let { preview -> RestorePreviewDialog(preview, state.busy, model::confirmRestore, model::cancelRestore) }
+}
+
+@Composable
+private fun RestorePreviewDialog(preview: RestorePreview, busy: Boolean, confirm: () -> Unit, cancel: () -> Unit) {
+    var understood by remember(preview) { mutableStateOf(false) }
+    fun describe(c: DataCounts) = buildString {
+        append(if (c.profile) "Perfil y " else "Sin perfil · ")
+        append(if (c.contract) "contrato · " else "sin contrato · ")
+        append("${c.rates} tarifa(s) · ${c.days} día(s) · ${c.intervals} intervalo(s)")
+        if (c.firstDate != null) append(" · del ${c.firstDate} al ${c.lastDate}")
+    }
+    val header = preview.file.header
+    AlertDialog(onDismissRequest = { if (!busy) cancel() }, title = { Text("¿Restaurar esta copia?") }, text = {
+        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Copia creada el ${header.createdAt.atZone(java.time.ZoneId.systemDefault()).toLocalDateTime().toString().replace('T', ' ').take(16)} con TurnoControl ${header.appVersionName}.")
+            Text("Contenido de la copia", style = MaterialTheme.typography.labelLarge)
+            Text(describe(preview.incoming))
+            Text("Datos actuales que se sustituirán", style = MaterialTheme.typography.labelLarge)
+            Text(describe(preview.current))
+            Text("Se sustituirán TODOS los datos actuales (no se combinan). Antes se guardará en el dispositivo una copia automática de los datos actuales.",
+                color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(understood, { understood = it }, enabled = !busy)
+                Text("Entiendo que se sustituirán mis datos actuales")
+            }
+        }
+    }, confirmButton = { TextButton(onClick = confirm, enabled = understood && !busy) { Text("Restaurar") } },
+        dismissButton = { TextButton(onClick = cancel, enabled = !busy) { Text("Cancelar") } })
 }
 
 @Composable

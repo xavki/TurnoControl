@@ -42,8 +42,30 @@ interface ConfigurationDao {
 val MIGRATION_1_2 = object : Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("ALTER TABLE PayRule ADD COLUMN currency TEXT NOT NULL DEFAULT 'EUR'") }
 }
+/** Whole-database reads and replacement for backup/restore. Callers run these inside one transaction. */
+@Dao
+interface BackupDao {
+    @Query("SELECT * FROM Profile ORDER BY id") suspend fun profiles(): List<Profile>
+    @Query("SELECT * FROM Contract ORDER BY id") suspend fun contracts(): List<Contract>
+    @Query("SELECT * FROM PayRule ORDER BY id") suspend fun payRules(): List<PayRule>
+    @Query("SELECT * FROM ScheduledDay ORDER BY id") suspend fun days(): List<ScheduledDay>
+    @Query("SELECT * FROM ScheduledInterval ORDER BY id") suspend fun intervals(): List<ScheduledInterval>
+    // Children before parents, without relying on cascades.
+    @Query("DELETE FROM ScheduledInterval") suspend fun deleteIntervals()
+    @Query("DELETE FROM ScheduledDay") suspend fun deleteDays()
+    @Query("DELETE FROM PayRule") suspend fun deletePayRules()
+    @Query("DELETE FROM Contract") suspend fun deleteContracts()
+    @Query("DELETE FROM Profile") suspend fun deleteProfiles()
+    @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertProfiles(rows: List<Profile>)
+    @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertContracts(rows: List<Contract>)
+    @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertPayRules(rows: List<PayRule>)
+    @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertDays(rows: List<ScheduledDay>)
+    @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertIntervals(rows: List<ScheduledInterval>)
+}
+
 @Database(entities = [Profile::class, Contract::class, PayRule::class, ScheduledDay::class, ScheduledInterval::class], version = 4, exportSchema = true)
 abstract class TurnoDatabase : RoomDatabase() {
     abstract fun configuration(): ConfigurationDao
     abstract fun schedule(): ScheduleDao
+    abstract fun backup(): BackupDao
 }
