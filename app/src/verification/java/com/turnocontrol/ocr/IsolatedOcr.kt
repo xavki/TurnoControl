@@ -3,8 +3,10 @@ package com.turnocontrol.ocr
 import android.app.Service
 import android.content.ComponentName
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.ServiceConnection
+import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.os.Binder
 import android.os.Build
@@ -25,12 +27,14 @@ import kotlinx.coroutines.withTimeout
 import kotlin.coroutines.resume
 
 /*
- * PROOF OF CONCEPT, verification build only, NOT VALIDATED ON ANDROID (phase 5D). Not used by any screen.
+ * PROOF OF CONCEPT, verification build only. Not used by any screen.
  * Runs only the ML Kit call in an `isolatedProcess` service (ephemeral UID, SELinux isolated_app: no network even if the
  * app later gets INTERNET). The bitmap crosses as SharedMemory (never in a Parcel: ~1 MB limit), the result comes back as
  * text + geometry. Decoding, EXIF, rotation, memory budget, review and saving stay in the app process unchanged.
- * Open questions to validate on an emulator: ML Kit initialization without its ContentProvider, the bundled model load,
- * and whether the play-services-mlkit dependency needs Google Play services (an isolated process cannot bind to it).
+ * Emulator result (phase 5D.1, API 35): binding and the read-only SharedMemory transfer work, but ML Kit 16.0.1 DOES NOT
+ * RUN in an isolated process. After working around a Play-services handler crash and the missing SharedPreferences, its
+ * native pipeline calls ANeuralNetworks_getRuntimeFeatureLevel, SELinux denies hwbinder and libneuralnetworks crashes
+ * (SIGSEGV). No public API avoids that, so production OCR stays in the app process.
  */
 internal object IsolatedOcrProtocol {
     const val DESCRIPTOR = "com.turnocontrol.ocr.IsolatedOcr"
@@ -42,8 +46,19 @@ internal object IsolatedOcrProtocol {
 class IsolatedOcrService : Service() {
     override fun onCreate() {
         super.onCreate()
-        // No ContentProvider runs in an isolated process, so ML Kit is initialized explicitly (public API).
-        runCatching { com.google.mlkit.common.MlKit.initialize(applicationContext) }
+        // Validated on an emulator (phase 5D.1): ML Kit starts a Play-services GoogleApiManager whose handler thread calls
+        // ActivityManager.getMyMemoryState(), which Android forbids in isolated processes. The uncaught SecurityException
+        // killed the whole process. Only that exception on that thread is absorbed (it only feeds Play-services telemetry);
+        // anything else still reaches the previous handler. Fragile by nature: a reason this stays a proof of concept.
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            if (thread.name == "GoogleApiHandler" && error is SecurityException) android.util.Log.w("IsolatedOcr", "Play-services handler stopped in the isolated process: ${error.message}")
+            else previous?.uncaughtException(thread, error)
+        }
+        // No ContentProvider runs in an isolated process, so ML Kit is initialized explicitly (public API). Its MLHandler
+        // thread also reads SharedPreferences, which need a UserManager an isolated process does not have (validated on
+        // an emulator): a ContextWrapper keeps those preferences in memory, for the life of this process only.
+        runCatching { com.google.mlkit.common.MlKit.initialize(IsolatedContext(applicationContext)) }
     }
 
     override fun onBind(intent: Intent): IBinder = object : Binder() {
@@ -70,6 +85,42 @@ class IsolatedOcrService : Service() {
             try { bitmap.copyPixelsFromBuffer(buffer) } finally { SharedMemory.unmap(buffer) }
             return OcrDocumentCodec.encode(runBlocking { MlKitTextRecognitionEngine.recognize(bitmap) }).also { bitmap.recycle() }
         } finally { memory.close() }
+    }
+}
+
+/** Context for ML Kit inside the isolated process: in-memory SharedPreferences, nothing written to disk. */
+private class IsolatedContext(base: Context) : ContextWrapper(base) {
+    private val preferences = HashMap<String, SharedPreferences>()
+    override fun getApplicationContext(): Context = this
+    override fun getSharedPreferences(name: String, mode: Int): SharedPreferences = synchronized(preferences) { preferences.getOrPut(name) { InMemoryPreferences() } }
+}
+
+private class InMemoryPreferences : SharedPreferences {
+    private val values = HashMap<String, Any?>()
+    private val listeners = HashSet<SharedPreferences.OnSharedPreferenceChangeListener>()
+    @Synchronized override fun getAll(): Map<String, *> = HashMap(values)
+    @Synchronized override fun getString(key: String, defValue: String?) = values[key] as? String ?: defValue
+    @Suppress("UNCHECKED_CAST")
+    @Synchronized override fun getStringSet(key: String, defValues: Set<String>?) = (values[key] as? Set<String>)?.toSet() ?: defValues
+    @Synchronized override fun getInt(key: String, defValue: Int) = values[key] as? Int ?: defValue
+    @Synchronized override fun getLong(key: String, defValue: Long) = values[key] as? Long ?: defValue
+    @Synchronized override fun getFloat(key: String, defValue: Float) = values[key] as? Float ?: defValue
+    @Synchronized override fun getBoolean(key: String, defValue: Boolean) = values[key] as? Boolean ?: defValue
+    @Synchronized override fun contains(key: String) = key in values
+    @Synchronized override fun registerOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) { listeners += listener }
+    @Synchronized override fun unregisterOnSharedPreferenceChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) { listeners -= listener }
+    override fun edit(): SharedPreferences.Editor = object : SharedPreferences.Editor {
+        private val changes = HashMap<String, Any?>(); private val removals = HashSet<String>(); private var clear = false
+        override fun putString(key: String, value: String?) = apply { changes[key] = value }
+        override fun putStringSet(key: String, values: Set<String>?) = apply { changes[key] = values?.toSet() }
+        override fun putInt(key: String, value: Int) = apply { changes[key] = value }
+        override fun putLong(key: String, value: Long) = apply { changes[key] = value }
+        override fun putFloat(key: String, value: Float) = apply { changes[key] = value }
+        override fun putBoolean(key: String, value: Boolean) = apply { changes[key] = value }
+        override fun remove(key: String) = apply { removals += key }
+        override fun clear() = apply { clear = true }
+        override fun commit(): Boolean { synchronized(this@InMemoryPreferences) { if (clear) values.clear(); removals.forEach(values::remove); values.putAll(changes) }; return true }
+        override fun apply() { commit() }
     }
 }
 

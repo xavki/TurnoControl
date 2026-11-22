@@ -41,7 +41,8 @@ class NetworkPrivacyTripwireTest {
             "com.google.mlkit.common.internal.MlKitComponentDiscoveryService",
             "com.google.mlkit.common.internal.MlKitInitProvider",
         ), telemetry)
-        // No component runs in an isolated process yet: the OCR isolation proof of concept is not implemented.
+        // No production component runs in an isolated process: the OCR proof of concept lives only in the verification
+        // build, and ML Kit could not run there on an emulator (phase 5D.1).
         assertTrue(info.services.orEmpty().none { (it.flags and android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 })
     }
 
