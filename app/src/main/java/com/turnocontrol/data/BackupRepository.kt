@@ -4,6 +4,9 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import androidx.room.withTransaction
+import com.turnocontrol.data.accounts.OperationGate
+import com.turnocontrol.data.accounts.StorageLayout
+import com.turnocontrol.data.accounts.StorageNamespace
 import com.turnocontrol.domain.DataFormat
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -51,15 +54,18 @@ class BackupRepository internal constructor(
     private val version: AppVersion,
     private val streams: StreamOpener? = null,
     private val clock: () -> Instant = Instant::now,
+    /** The data this repository restores into; recorded in the journal so recovery never touches other data. */
+    private val namespace: StorageNamespace = StorageNamespace.Guest,
+    private val gate: OperationGate = OperationGate(),
 ) {
     interface StreamOpener { fun input(uri: Uri): InputStream?; fun output(uri: Uri): OutputStream? }
 
-    @Inject constructor(db: TurnoDatabase, configuration: ConfigurationRepository, @ApplicationContext context: Context) : this(
-        db, { configuration.darkTheme.first() }, configuration::setDarkTheme, File(context.filesDir, "backup-recovery"), appVersion(context),
+    @Inject constructor(db: TurnoDatabase, configuration: ConfigurationRepository, @ApplicationContext context: Context, gate: OperationGate) : this(
+        db, { configuration.darkTheme.first() }, configuration::setDarkTheme, StorageLayout(context.filesDir).locate(StorageNamespace.Guest).recoveryDirectory, appVersion(context),
         object : StreamOpener {
             override fun input(uri: Uri) = context.contentResolver.openInputStream(uri)
             override fun output(uri: Uri) = context.contentResolver.openOutputStream(uri, "wt")
-        })
+        }, namespace = StorageNamespace.Guest, gate = gate)
 
     private val lock = Mutex()
     internal val journal get() = File(directory, "restore.journal")
@@ -109,13 +115,15 @@ class BackupRepository internal constructor(
     }
 
     /** [afterRoom] exists only so tests can simulate an interruption between the Room and DataStore steps. */
-    suspend fun restore(file: BackupFile, afterRoom: suspend () -> Unit = {}): BackupSnapshot = withContext(Dispatchers.IO) { lock.withLock {
+    suspend fun restore(file: BackupFile, afterRoom: suspend () -> Unit = {}): BackupSnapshot = gate.operation("restore") { restoreLocked(file, afterRoom) }
+
+    private suspend fun restoreLocked(file: BackupFile, afterRoom: suspend () -> Unit): BackupSnapshot = withContext(Dispatchers.IO) { lock.withLock {
         val wanted = file.snapshot.normalized()
         BackupCodec.validate(wanted)
         directory.mkdirs()
         writeAtomically(safetyCopy, BackupCodec.encode(BackupFile(header(), snapshot())))
         writeAtomically(target, BackupCodec.encode(BackupFile(file.header, wanted)))
-        writeAtomically(journal, "restore-started ${clock()}")
+        writeAtomically(journal, "restore-started ${clock()} namespace=${namespace.tag}")
         val dao = db.backup()
         try {
             db.withTransaction {
@@ -141,6 +149,10 @@ class BackupRepository internal constructor(
 
     suspend fun recoverInterrupted(): RecoveryOutcome = withContext(Dispatchers.IO) { lock.withLock {
         if (!journal.exists()) return@withLock RecoveryOutcome.None
+        // A journal written for other data (another account, or a legacy guest journal seen by an account) is never
+        // evaluated here and never deleted: only the repository of its own namespace may act on it.
+        val owner = Regex("namespace=(\\S+)").find(journal.readText())?.groupValues?.get(1) ?: StorageNamespace.Guest.tag
+        if (owner != namespace.tag) return@withLock RecoveryOutcome.None
         val wanted = runCatching { BackupCodec.decode(target.readText()).snapshot }.getOrNull()
         val original = runCatching { BackupCodec.decode(safetyCopy.readText()).snapshot }.getOrNull()
         val current = snapshot()

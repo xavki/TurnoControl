@@ -14,5 +14,5 @@ import javax.inject.Singleton
 @Module @InstallIn(SingletonComponent::class)
 object StorageModule {
     @Provides @Singleton fun database(@ApplicationContext context: Context): TurnoDatabase =
-        Room.databaseBuilder(context, TurnoDatabase::class.java, "turnocontrol.db").addMigrations(*ALL_MIGRATIONS).build()
+        Room.databaseBuilder(context, TurnoDatabase::class.java, com.turnocontrol.data.accounts.StorageLayout.GUEST_DATABASE).addMigrations(*ALL_MIGRATIONS).build()
 }

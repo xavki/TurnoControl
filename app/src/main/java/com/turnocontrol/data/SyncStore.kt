@@ -144,13 +144,6 @@ internal fun SyncOutbox.change(): PendingChange {
 internal fun PendingChange.row() = SyncOutbox(operationId = operationId, entity = key.entity.name, recordKey = key.key, op = op.name, payload = payload?.text,
     baseVersion = baseVersion, afterPredecessor = afterPredecessor, state = state.name, attempts = attempts)
 
-/** Future per-account storage (decision D5). Not wired yet: the existing database is never renamed or moved. */
-object AccountDatabases {
-    const val LOCAL = "turnocontrol.db"
-    fun fileName(accountId: String?): String = if (accountId == null) LOCAL else
-        "turnocontrol-acct-" + MessageDigest.getInstance("SHA-256").digest(accountId.toByteArray()).joinToString("") { "%02x".format(it) }.take(16) + ".db"
-}
-
 /**
  * Persistent side of the synchronization engine. Each protocol step is its own Room transaction over freshly loaded
  * state, and network calls happen outside any transaction:
@@ -163,7 +156,8 @@ object AccountDatabases {
  * pages are pulled again from the committed cursor.
  */
 @Singleton
-class SyncStore @Inject constructor(private val db: TurnoDatabase) {
+class SyncStore @Inject constructor(private val db: TurnoDatabase, private val gate: com.turnocontrol.data.accounts.OperationGate) {
+    constructor(db: TurnoDatabase) : this(db, com.turnocontrol.data.accounts.OperationGate())
     companion object {
         /** Reason of a valid record this schema cannot store yet; it is restored as-is once the schema can. */
         const val PARKED = "Este dispositivo todavía no puede guardar este dato."
@@ -278,7 +272,10 @@ class SyncStore @Inject constructor(private val db: TurnoDatabase) {
     }
 
     /** One synchronization pass against [transport]. Refuses unlinked databases and restores awaiting review. */
-    suspend fun synchronize(transport: SyncTransport, batchSize: Int = SyncEngine.BATCH_SIZE, pageSize: Int = SyncEngine.PAGE_SIZE): SyncResult = withContext(Dispatchers.IO) {
+    suspend fun synchronize(transport: SyncTransport, batchSize: Int = SyncEngine.BATCH_SIZE, pageSize: Int = SyncEngine.PAGE_SIZE): SyncResult =
+        gate.operation("sync") { synchronizeLocked(transport, batchSize, pageSize) }
+
+    private suspend fun synchronizeLocked(transport: SyncTransport, batchSize: Int, pageSize: Int): SyncResult = withContext(Dispatchers.IO) {
         val state = db.withTransaction { ensureState() }
         if (state.accountId == null) return@withContext SyncResult(load(), SyncStatus.NOT_LINKED, "No hay ninguna cuenta vinculada.")
         if (state.restoreReviewRequired) return@withContext SyncResult(load(), SyncStatus.REVIEW_REQUIRED, "Revisa los datos restaurados antes de sincronizar.")
@@ -303,8 +300,9 @@ class SyncStore @Inject constructor(private val db: TurnoDatabase) {
         SyncResult(load(), status)
     }
 
-    suspend fun resolve(key: RecordKey, resolution: Resolution, today: LocalDate): ResolutionResult =
+    suspend fun resolve(key: RecordKey, resolution: Resolution, today: LocalDate): ResolutionResult = gate.operation("sync") {
         step { replica -> SyncEngine.resolve(replica, key, resolution, today, OperationIds.Random).let { it.replica to it } }
+    }
 
     /** Re-evaluates quarantined records once after an update; still unsupported ones stay quarantined. */
     suspend fun replayQuarantine(): Replica {

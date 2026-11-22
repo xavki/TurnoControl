@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import com.turnocontrol.data.accounts.OperationGate
 import com.turnocontrol.domain.*
 import androidx.room.withTransaction
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -16,8 +17,8 @@ import kotlinx.coroutines.flow.map
 
 private val Context.preferences by preferencesDataStore("preferences")
 @Singleton
-class ConfigurationRepository internal constructor(private val db: TurnoDatabase, private val preferences: DataStore<Preferences>) {
-    @Inject constructor(db: TurnoDatabase, @ApplicationContext context: Context) : this(db, context.preferences)
+class ConfigurationRepository internal constructor(private val db: TurnoDatabase, private val preferences: DataStore<Preferences>, private val gate: OperationGate = OperationGate()) {
+    @Inject constructor(db: TurnoDatabase, @ApplicationContext context: Context, gate: OperationGate) : this(db, context.preferences, gate)
     val profile = db.configuration().observeProfile()
     val rates = db.configuration().observeRates().map { rules -> rules.associate { it.type to it.amountDecimal } }
     suspend fun load(profile: Profile): ConfigurationDraft {
@@ -29,7 +30,9 @@ class ConfigurationRepository internal constructor(private val db: TurnoDatabase
             contract?.unit ?: "MONTH", contract?.validFrom ?: java.time.LocalDate.now().toString(), rate?.amountDecimal ?: "",
             rates.filter { it.type in rateLabels }.associate { it.type to it.amountDecimal })
     }
-    suspend fun save(draft: ConfigurationDraft) {
+    suspend fun save(draft: ConfigurationDraft) = gate.operation("settings-save") { saveLocked(draft) }
+
+    private suspend fun saveLocked(draft: ConfigurationDraft) {
         // Authoritative check against what is stored (legacy values longer than the limit are kept when unchanged).
         val stored = db.schedule().profile()
         draft.validate(stored?.displayName, stored?.alias)?.let { throw ConfigurationValidationException(it) }

@@ -330,9 +330,6 @@ class SyncStoreTest {
         assertTrue(server.received.isEmpty())
         val unlinked = open("sync-owner-unlinked.db")
         assertEquals(SyncStatus.NOT_LINKED, SyncStore(unlinked).synchronize(server.transport(server.signIn("ana"))).status)
-        assertEquals("turnocontrol.db", AccountDatabases.fileName(null))
-        assertTrue(AccountDatabases.fileName("ana").matches(Regex("turnocontrol-acct-[0-9a-f]{16}\\.db")))
-        assertNotEquals(AccountDatabases.fileName("ana"), AccountDatabases.fileName("bob"))
     }
 
     @Test fun restoreOfAnOldBackupAfterMigrationWaitsForReview() = runTest {

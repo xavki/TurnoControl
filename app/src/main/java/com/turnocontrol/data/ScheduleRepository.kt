@@ -1,6 +1,7 @@
 package com.turnocontrol.data
 
 import androidx.room.withTransaction
+import com.turnocontrol.data.accounts.OperationGate
 import com.turnocontrol.domain.*
 import com.turnocontrol.domain.sync.DayRecord
 import com.turnocontrol.domain.sync.LocalRecord
@@ -20,7 +21,8 @@ fun StoredScheduleDay.planned() = PlannedDay(LocalDate.parse(day.date),
 class ScheduleChangedException : IllegalStateException("El calendario cambió desde que lo abriste. Vuelve a cargar y revisar; no se ha guardado nada.")
 
 @Singleton
-class ScheduleRepository @Inject constructor(private val db: TurnoDatabase) {
+class ScheduleRepository @Inject constructor(private val db: TurnoDatabase, private val gate: OperationGate) {
+    constructor(db: TurnoDatabase) : this(db, OperationGate())
     val days = db.schedule().observe()
     suspend fun snapshot() = db.schedule().all().canonical()
     private fun List<StoredScheduleDay>.canonical() = sortedBy { it.day.date }.map { it.copy(intervals = it.intervals.sortedBy { i -> i.position }) }
@@ -31,7 +33,10 @@ class ScheduleRepository @Inject constructor(private val db: TurnoDatabase) {
      * by synchronization, do not reject the edit. The resulting calendar is still validated in full. If the database
      * is linked to an account, the outgoing changes are recorded in this same transaction.
      */
-    suspend fun save(expected: List<StoredScheduleDay>, replacements: List<PlannedDay>, deletions: Set<LocalDate> = emptySet(), origin: String = "MANUAL") {
+    suspend fun save(expected: List<StoredScheduleDay>, replacements: List<PlannedDay>, deletions: Set<LocalDate> = emptySet(), origin: String = "MANUAL") =
+        gate.operation("calendar-save") { saveLocked(expected, replacements, deletions, origin) }
+
+    private suspend fun saveLocked(expected: List<StoredScheduleDay>, replacements: List<PlannedDay>, deletions: Set<LocalDate>, origin: String) {
         require(origin in setOf("MANUAL", "OCR_REVIEWED"))
         require(replacements.map { it.date }.toSet().intersect(deletions).isEmpty())
         PlannedScheduleValidator.validate(replacements)?.let { throw IllegalArgumentException(it) }
