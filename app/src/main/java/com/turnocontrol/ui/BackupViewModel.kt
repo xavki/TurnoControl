@@ -22,7 +22,8 @@ fun BackupSnapshot.counts() = DataCounts(profiles.isNotEmpty(), contracts.isNotE
 
 data class RestorePreview(val file: BackupFile, val incoming: DataCounts, val current: DataCounts)
 /** [dataReplaced] is a one-shot signal: the screen resets dependent state once and then calls [BackupViewModel.consumeDataReplaced]. */
-data class BackupState(val busy: Boolean = false, val message: String? = null, val error: Boolean = false, val preview: RestorePreview? = null, val dataReplaced: Boolean = false)
+/** [notice] is the restore confirmation shown at the top of Ajustes until dismissed, so a screen refresh cannot hide it. */
+data class BackupState(val busy: Boolean = false, val message: String? = null, val error: Boolean = false, val preview: RestorePreview? = null, val dataReplaced: Boolean = false, val notice: String? = null)
 
 @HiltViewModel
 class BackupViewModel internal constructor(
@@ -66,6 +67,7 @@ class BackupViewModel internal constructor(
             mutable.update { it.copy(preview = RestorePreview(file, file.snapshot.counts(), current().counts())) }
         }
     }
+    fun dismissNotice() = mutable.update { it.copy(notice = null) }
     fun consumeDataReplaced() = mutable.update { it.copy(dataReplaced = false) }
     fun cancelRestore() = mutable.update { it.copy(preview = null, message = "Restauración cancelada. No se ha modificado nada.", error = false) }
 
@@ -74,8 +76,8 @@ class BackupViewModel internal constructor(
         run {
             val stored = restore(preview.file)
             val c = stored.counts()
-            mutable.update { it.copy(preview = null, dataReplaced = true,
-                message = "Copia restaurada y comprobada: ${c.days} día(s), ${c.intervals} intervalo(s) y ${c.rates} tarifa(s). Se guardó en el dispositivo una copia automática de los datos anteriores.") }
+            val text = "Copia restaurada y comprobada: ${c.days} día(s), ${c.intervals} intervalo(s) y ${c.rates} tarifa(s). Se guardó en el dispositivo una copia automática de los datos anteriores."
+            mutable.update { it.copy(preview = null, dataReplaced = true, message = text, notice = text) }
         }
     }
 }

@@ -14,7 +14,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -36,9 +40,24 @@ fun SettingsScreen(model: ConfigurationViewModel, state: ConfigurationState, onI
     Column(Modifier.fillMaxSize()) {
         TurnoTopBar("Ajustes", onBack = onBack)
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            backup?.let { RestoreNotice(it) }
             OutlinedButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("Importar horario") }
             ConfigurationForm(state, model)
             backup?.let { BackupSection(it, restoreBlockedReason) }
+        }
+    }
+}
+
+/** Top of Ajustes: after a restore the form reloads, so a message lower down would be off screen. */
+@Composable
+private fun RestoreNotice(model: BackupViewModel) {
+    val state by model.state.collectAsStateWithLifecycle()
+    val notice = state.notice ?: return
+    Surface(color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer, shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(notice, style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = model::dismissNotice, contentPadding = PaddingValues(0.dp)) { Text("Entendido") }
         }
     }
 }
@@ -80,8 +99,11 @@ private fun RestorePreviewDialog(preview: RestorePreview, busy: Boolean, confirm
             Text(describe(preview.current))
             Text("Se sustituirán TODOS los datos actuales (no se combinan). Antes se guardará en el dispositivo una copia automática de los datos actuales.",
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(understood, { understood = it }, enabled = !busy)
+            // The whole row (box and label) is one toggle: a 48 dp target and a single TalkBack checkbox.
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(value = understood, enabled = !busy, role = Role.Checkbox) { understood = it },
+                verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(understood, onCheckedChange = null, enabled = !busy)
+                Spacer(Modifier.width(8.dp))
                 Text("Entiendo que se sustituirán mis datos actuales")
             }
         }

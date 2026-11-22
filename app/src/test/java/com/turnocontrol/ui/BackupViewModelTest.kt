@@ -63,6 +63,18 @@ class BackupViewModelTest {
         model.confirmRestore(); runCurrent()
         assertEquals(0, restores)
         assertFalse(model.state.value.dataReplaced)
+        assertNull("No success notice without a restore", model.state.value.notice)
+    }
+
+    @Test fun restoreNoticeStaysUntilDismissedEvenAfterTheResetIsConsumed() = runTest(dispatcher) {
+        val model = model()
+        model.pick(uri); runCurrent()
+        model.confirmRestore(); runCurrent()
+        assertTrue(model.state.value.notice!!.contains("restaurada y comprobada"))
+        model.consumeDataReplaced() // what MainActivity does after reloading the settings
+        assertTrue(model.state.value.notice!!.contains("restaurada y comprobada"))
+        model.dismissNotice()
+        assertNull(model.state.value.notice)
     }
 
     @Test fun exportReportsOnlyAfterVerificationAndUsesAPrivateFileName() = runTest(dispatcher) {

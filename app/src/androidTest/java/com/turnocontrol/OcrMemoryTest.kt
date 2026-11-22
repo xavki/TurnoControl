@@ -47,6 +47,6 @@ class OcrMemoryTest {
         val uri = ScheduleFixtures.write(context, "repeat.jpg", ScheduleFixtures.scene(4000, 3000), 90)
         repeat(5) { ocr.load(uri).bitmap.recycle() }
         val last = ocr.load(uri)
-        assertEquals(3000 to 4000, last.bitmap.width to last.bitmap.height)
+        assertEquals(4000 to 3000, last.bitmap.width to last.bitmap.height) // landscape scene, EXIF 90 undone once
     }
 }
