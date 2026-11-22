@@ -6,5 +6,9 @@
             android:exported="false" android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/ocr_fixture_paths" />
         </provider>
+        <!-- Isolated-OCR proof of concept (verification build only, not validated on Android, not used by any screen).
+             isolatedProcess: ephemeral UID and SELinux isolated_app, so it has no network access. -->
+        <service android:name="com.turnocontrol.ocr.IsolatedOcrService" android:process=":ocr"
+            android:isolatedProcess="true" android:exported="false" />
     </application>
 </manifest>

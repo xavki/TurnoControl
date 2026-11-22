@@ -26,9 +26,15 @@ import java.time.LocalTime
 class AccountLinkingTest {
     @get:Rule val temporary = TemporaryFolder()
     private val context = ApplicationProvider.getApplicationContext<Context>()
-    // Ids unique to this class: file names never collide with other test classes in the shared Robolectric sandbox.
-    private val a = AccountId.parse("00000000-0000-4000-8000-0000000005a1")!!
-    private val b = AccountId.parse("00000000-0000-4000-8000-0000000005b2")!!
+    @get:Rule val testName = org.junit.rules.TestName()
+    // Ids unique to each test: a database path is never reused right after deletion (intermittent SQLITE_CANTOPEN on
+    // Windows when a WAL file of a just-deleted path is still being released).
+    private fun idFor(suffix: String): AccountId {
+        val hex = java.security.MessageDigest.getInstance("SHA-256").digest((testName.methodName + suffix).toByteArray()).joinToString("") { "%02x".format(it) }
+        return AccountId.parse("${hex.take(8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-8${hex.substring(17, 20)}-${hex.substring(20, 32)}")!!
+    }
+    private val a by lazy { idFor("a") }
+    private val b by lazy { idFor("b") }
     private val layout get() = StorageLayout(File(temporary.root, "files"))
     private val gate = OperationGate()
     private val server = FakeSyncServer { LocalDate.parse("2026-12-01") }

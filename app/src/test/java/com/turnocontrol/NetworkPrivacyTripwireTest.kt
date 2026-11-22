@@ -44,4 +44,19 @@ class NetworkPrivacyTripwireTest {
         // No component runs in an isolated process yet: the OCR isolation proof of concept is not implemented.
         assertTrue(info.services.orEmpty().none { (it.flags and android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 })
     }
+
+    @Test fun productionManifestHasNoNetworkConfigurationOrExtraProcesses() {
+        val main = java.io.File("src/main/AndroidManifest.xml").readText()
+        listOf("networkSecurityConfig", "usesCleartextTraffic", "android:process", "isolatedProcess").forEach { assertFalse(it, main.contains(it)) }
+        assertTrue(main.contains("android.permission.INTERNET\" tools:node=\"remove\"") && main.contains("android.permission.ACCESS_NETWORK_STATE\" tools:node=\"remove\""))
+        assertTrue(info.services.orEmpty().none { it.processName != null && it.processName != context.packageName })
+    }
+
+    @Test fun isolatedOcrProofOfConceptStaysInTheVerificationBuildWithoutNetwork() {
+        val verification = java.io.File("src/verification/AndroidManifest.xml").readText()
+        assertTrue(verification.contains("android:name=\"com.turnocontrol.ocr.IsolatedOcrService\""))
+        assertTrue(verification.contains("android:isolatedProcess=\"true\"") && verification.contains("android:exported=\"false\""))
+        assertFalse(verification.contains("uses-permission"))
+        assertTrue(info.services.orEmpty().none { it.name == "com.turnocontrol.ocr.IsolatedOcrService" }) // Absent from the debug/release build.
+    }
 }
