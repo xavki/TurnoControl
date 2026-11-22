@@ -453,6 +453,15 @@ Límites de transacción y comportamiento:
 
 ---
 
+### 6.1 Implementación local (fase 5A, 2026-11-22)
+La propuesta anterior está implementada y probada **solo en local**, en `backend/` (ver `backend/README.md`), con estos ajustes:
+- **Contenido:** es el texto canónico del cliente (`text`), no `jsonb`.
+- **Mínimo privilegio:** `authenticated` no tiene privilegios sobre las tablas. Las RPC son `SECURITY DEFINER` del rol `turno_owner`, con `search_path` vacío y RLS forzada.
+- **Lotes estrictos:** los campos desconocidos, como un propietario falsificado o datos médicos, hacen fallar el lote.
+- **Sesión:** `turno.current_account()` comprueba el rol, la caducidad y el sujeto de la sesión.
+- **Resultados:** 72 pruebas SQL y una prueba de concurrencia superadas contra PostgreSQL 16 real.
+- **Pendiente:** la verificación de la firma del JWT, que hace la pasarela de Supabase alojado y no se ha probado aquí.
+
 ## 7. Modelo de seguridad (RLS) y aislamiento
 
 ```sql
