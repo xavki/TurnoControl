@@ -119,6 +119,8 @@ La tabla mantiene sus columnas, pero `id` pasa a ser autogenerado y se añade el
 
 ## 4. Migración 4 → 5
 
+> **Actualización (fase 3, 2026-11-22):** por la decisión D3, el esquema 5 ya está ocupado por las tablas locales de sincronización (ver `ARQUITECTURA_0.3.0_CUENTAS_Y_SINCRONIZACION.md`, §8). Lo descrito en esta sección se aplicará como migración **5 → 6**, con `DataFormat.CURRENT = 3` y la copia de seguridad en formato 2.
+
 En una sola `Migration(4, 5)`, dentro de la transacción de Room:
 
 1. `CREATE TABLE` de `WorkEntry`, `WorkBreak`, `EntryCorrection` y `PayslipRecord`, con sus índices. El SQL se copia del esquema exportado `5.json`.
