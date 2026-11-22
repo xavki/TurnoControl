@@ -34,6 +34,8 @@ object BackupCodec {
     const val FORMAT = "turnocontrol-backup"
     const val FORMAT_VERSION = 1
     const val MAX_BYTES = 10 * 1024 * 1024
+    /** Room schemas whose backups (format 1) can be restored: 4 is TurnoControl 0.2.0, the first with backups. */
+    val SUPPORTED_SCHEMAS: IntRange get() = 4..DataFormat.ROOM_SCHEMA_VERSION
     private val contractTypes = setOf("PARTIAL", "FULL")
     private val contractUnits = setOf("WEEK", "MONTH", "YEAR")
     private val origins = setOf("MANUAL", "OCR_REVIEWED")
@@ -67,9 +69,11 @@ object BackupCodec {
         val formatVersion = root.int("formatVersion")
         if (formatVersion > FORMAT_VERSION) throw BackupException("La copia se creó con una versión más nueva de TurnoControl (formato $formatVersion). Actualiza la aplicación para restaurarla.")
         if (formatVersion < 1) throw BackupException("Versión de copia no admitida ($formatVersion).")
+        // The schema version only says which app wrote the file. The data sections of format 1 are the same for every
+        // supported schema, so acceptance does not depend on the schema this app currently uses.
         val schema = root.int("schemaVersion")
         if (schema > DataFormat.ROOM_SCHEMA_VERSION) throw BackupException("La copia procede de una versión más nueva de la base de datos ($schema). Actualiza la aplicación.")
-        if (schema < DataFormat.ROOM_SCHEMA_VERSION) throw BackupException("Versión de base de datos de la copia no admitida ($schema).")
+        if (schema !in SUPPORTED_SCHEMAS) throw BackupException("Versión de base de datos de la copia no admitida ($schema).")
         val dataFormat = root.int("dataFormat")
         if (dataFormat > DataFormat.CURRENT) throw BackupException("La copia contiene datos de una versión más nueva de TurnoControl (formato de datos $dataFormat).")
         val app = root.obj("app")
