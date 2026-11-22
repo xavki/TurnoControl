@@ -3,6 +3,7 @@ package com.turnocontrol.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.turnocontrol.data.ConfigurationRepository
+import com.turnocontrol.data.SyncConflictPendingException
 import com.turnocontrol.domain.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -12,7 +13,9 @@ import kotlinx.coroutines.Job
 import java.io.IOException
 import javax.inject.Inject
 
-data class ConfigurationState(val draft: ConfigurationDraft = ConfigurationDraft(), val loading: Boolean = true, val saving: Boolean = false, val message: String? = null, val configured: Boolean = false)
+/** [storedName] / [storedAlias]: values currently saved, so an unchanged legacy name longer than the limit stays valid. */
+data class ConfigurationState(val draft: ConfigurationDraft = ConfigurationDraft(), val loading: Boolean = true, val saving: Boolean = false, val message: String? = null, val configured: Boolean = false,
+    val storedName: String? = null, val storedAlias: String? = null)
 data class ThemeState(val dark: Boolean = false, val loading: Boolean = true, val error: String? = null)
 @HiltViewModel
 class ConfigurationViewModel @Inject constructor(private val repository: ConfigurationRepository) : ViewModel() {
@@ -46,19 +49,28 @@ class ConfigurationViewModel @Inject constructor(private val repository: Configu
         mutable.update { it.copy(loading = true) }
         try {
             val profile = repository.profile.first()
-            mutable.value = ConfigurationState(draft = profile?.let { repository.load(it) } ?: ConfigurationDraft(), loading = false, configured = profile != null)
+            mutable.value = ConfigurationState(draft = profile?.let { repository.load(it) } ?: ConfigurationDraft(), loading = false, configured = profile != null,
+                storedName = profile?.displayName, storedAlias = profile?.alias)
         } catch (e: Exception) { if (e is CancellationException) throw e; mutable.update { it.copy(loading = false, message = "No se pudo leer la configuración local.") } }
     } }
     fun update(draft: ConfigurationDraft) { mutable.update { it.copy(draft = draft, message = null) } }
+    /** Every failure keeps the draft, so the user's edits are never lost and can be saved again. */
     fun save() {
-        val draft = state.value.draft
-        draft.validate()?.let { error -> mutable.update { it.copy(message = error) }; return }
+        val current = state.value
+        if (current.saving) return
+        val draft = current.draft
+        draft.validate(current.storedName, current.storedAlias)?.let { error -> mutable.update { it.copy(message = error) }; return }
         viewModelScope.launch {
             mutable.update { it.copy(saving = true) }
             try {
                 repository.save(draft)
-                mutable.update { it.copy(saving = false, configured = true, message = "Configuración guardada en este dispositivo.") }
-            } catch (e: Exception) { if (e is CancellationException) throw e; mutable.update { it.copy(saving = false, message = "No se pudo guardar. Reintenta.") } }
+                mutable.update { it.copy(saving = false, configured = true, storedName = draft.name.trim(), storedAlias = draft.alias.trim(), message = "Configuración guardada en este dispositivo.") }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                // Validation and pending-conflict errors carry a specific Spanish message; storage errors keep the generic one.
+                val message = if (e is ConfigurationValidationException || e is SyncConflictPendingException) e.message!! else "No se pudo guardar. Reintenta."
+                mutable.update { it.copy(saving = false, message = message) }
+            }
         }
     }
 }

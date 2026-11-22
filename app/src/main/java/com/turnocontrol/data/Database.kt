@@ -28,8 +28,12 @@ interface ConfigurationDao {
         if (rate == null) deleteRate() else putRate(rate)
     }
     @Query("DELETE FROM PayRule WHERE id = 1") suspend fun deleteRate()
-    @Query("DELETE FROM PayRule WHERE id = :id") suspend fun deleteRateById(id: Long)
-    @Query("DELETE FROM Contract WHERE id = 1") suspend fun deleteContract()
+    // Used by synchronization to apply remote deletions. Both stay inside the single local profile (id 1) like every
+    // other configuration query; accounts are isolated by database file, so no other account's rows exist here.
+    /** Deletes one rate period by id; a missing id, or a row of another profile, is left untouched. */
+    @Query("DELETE FROM PayRule WHERE id = :id AND profileId = 1") suspend fun deleteRateById(id: Long)
+    /** Deletes the profile's contract only; the profile, rates and calendar are unaffected (no cascade from Contract). */
+    @Query("DELETE FROM Contract WHERE id = 1 AND profileId = 1") suspend fun deleteContract()
     @Query("DELETE FROM PayRule WHERE profileId = 1 AND type IN (:types)") suspend fun deleteRates(types: Collection<String>)
     /** Replaces only the rate types this version manages; rows written by a newer version are preserved. */
     @Transaction suspend fun saveConfiguration(profile: Profile, contract: Contract, rates: List<PayRule>, managedTypes: Collection<String> = DataFormat.knownRateTypes) {

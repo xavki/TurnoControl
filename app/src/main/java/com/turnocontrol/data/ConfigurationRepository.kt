@@ -30,7 +30,9 @@ class ConfigurationRepository internal constructor(private val db: TurnoDatabase
             rates.filter { it.type in rateLabels }.associate { it.type to it.amountDecimal })
     }
     suspend fun save(draft: ConfigurationDraft) {
-        require(draft.validate() == null)
+        // Authoritative check against what is stored (legacy values longer than the limit are kept when unchanged).
+        val stored = db.schedule().profile()
+        draft.validate(stored?.displayName, stored?.alias)?.let { throw ConfigurationValidationException(it) }
         // Each managed type keeps its existing id (or its historical default); ids of unknown rows are never reused.
         val existing = db.configuration().rates()
         val taken = existing.map { it.id }.toMutableSet()

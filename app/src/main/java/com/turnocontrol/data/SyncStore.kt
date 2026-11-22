@@ -14,6 +14,20 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** A save touched a record with an unresolved synchronization conflict. Nothing was written. */
+class SyncConflictPendingException(val key: RecordKey) : IllegalArgumentException(
+    "No se puede guardar: ${describe(key)} tiene un conflicto de sincronización pendiente. Tus cambios no se han perdido ni se ha modificado nada; podrás guardarlos cuando se resuelva el conflicto.") {
+    private companion object {
+        fun describe(key: RecordKey) = when (key.entity) {
+            SyncEntity.PROFILE -> "el perfil"
+            SyncEntity.CONTRACT -> "el contrato"
+            SyncEntity.PAY_RULE -> "la tarifa ${key.key.substringBefore("@")}"
+            SyncEntity.SCHEDULED_DAY -> "el día ${key.key}"
+            SyncEntity.PAYSLIP -> "la nómina de ${key.key}"
+        }
+    }
+}
+
 /** Domain rows <-> synchronized records. Only allowlisted fields cross this boundary (see SyncCodecs). */
 internal object SyncRecords {
     private val plusTypes = setOf("NIGHT", "SPECIAL_NIGHT", "EXTRA_PAY")
@@ -109,8 +123,7 @@ internal object SyncCapture {
         val state = dao.state()?.takeIf { it.accountId != null } ?: return
         var next = state.nextOperation
         for ((key, value) in changes) {
-            if (dao.conflictCount(key.entity.name, key.key) > 0)
-                throw IllegalArgumentException("Este dato tiene un conflicto de sincronización sin resolver. Resuélvelo antes de editarlo.")
+            if (dao.conflictCount(key.entity.name, key.key) > 0) throw SyncConflictPendingException(key)
             val known = dao.recordState(key.entity.name, key.key)?.let { key to it.known(key) }
             val partial = Replica(state.accountId!!, state.deviceId, known = listOfNotNull(known).toMap(),
                 outbox = dao.outboxFor(key.entity.name, key.key).map { it.change() }, nextOperation = next)

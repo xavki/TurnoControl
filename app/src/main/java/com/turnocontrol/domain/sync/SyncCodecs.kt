@@ -155,7 +155,10 @@ object SyncCodecs {
     }
 
     fun encodeProfile(profile: ProfileRecord): LocalRecord.Shared {
-        require(profile.displayName.isNotBlank() && profile.displayName.length <= 200 && profile.alias.length <= 200) { "Perfil no válido." }
+        require(profile.displayName.isNotBlank()) { "Perfil no válido." }
+        if (!com.turnocontrol.domain.ProfileLimits.fits(profile.displayName) || !com.turnocontrol.domain.ProfileLimits.fits(profile.alias))
+            throw com.turnocontrol.domain.ConfigurationValidationException(
+                "El nombre visible o el alias superan ${com.turnocontrol.domain.ProfileLimits.MAX_TEXT_LENGTH} caracteres y no se pueden sincronizar. Acórtalos en Ajustes.")
         require(runCatching { java.time.ZoneId.of(profile.zoneId) }.isSuccess) { "Zona horaria no válida." }
         return LocalRecord.Shared(SyncPayload(SyncEntity.PROFILE, listOf("1", escape(profile.displayName), escape(profile.alias), profile.zoneId).joinToString("|")))
     }
