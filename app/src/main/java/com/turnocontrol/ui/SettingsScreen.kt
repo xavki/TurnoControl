@@ -36,11 +36,12 @@ fun TurnoTopBar(title: String, onSettings: (() -> Unit)? = null, onBack: (() -> 
 
 @Composable
 fun SettingsScreen(model: ConfigurationViewModel, state: ConfigurationState, onImport: () -> Unit, onBack: () -> Unit,
-    backup: BackupViewModel? = null, restoreBlockedReason: String? = null) {
+    backup: BackupViewModel? = null, restoreBlockedReason: String? = null, account: AccountViewModel? = null, onAccount: () -> Unit = {}) {
     Column(Modifier.fillMaxSize()) {
         TurnoTopBar("Ajustes", onBack = onBack)
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             backup?.let { RestoreNotice(it) }
+            account?.let { AccountSummaryCard(it, onAccount) }
             OutlinedButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) { Text("Importar horario") }
             ConfigurationForm(state, model)
             backup?.let { BackupSection(it, restoreBlockedReason) }

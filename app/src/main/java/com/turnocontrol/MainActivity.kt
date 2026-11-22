@@ -24,6 +24,7 @@ class MainActivity : ComponentActivity() {
     private val summaryModel: SummaryViewModel by viewModels()
     private val startupModel: StartupViewModel by viewModels()
     private val backupModel: BackupViewModel by viewModels()
+    private val accountModel: AccountViewModel by viewModels()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -45,7 +46,7 @@ class MainActivity : ComponentActivity() {
                         LaunchedEffect(backup.dataReplaced) {
                             if (backup.dataReplaced) { model.reload(); calendarModel.resetAfterRestore(); reviewModel.clear(); importModel.clear(); backupModel.consumeDataReplaced() }
                         }
-                        TurnoApp(model, importModel, reviewModel, calendarModel, summaryModel, backupModel)
+                        TurnoApp(model, importModel, reviewModel, calendarModel, summaryModel, backupModel, accountModel)
                     }
                 }
             }
@@ -56,7 +57,8 @@ class MainActivity : ComponentActivity() {
 private val tabs = listOf("Calendario" to TurnoIcons.Calendar, "Resumen" to TurnoIcons.Summary)
 
 @Composable
-fun TurnoApp(model: ConfigurationViewModel, importModel: ImportViewModel, reviewModel: ScheduleReviewViewModel, calendarModel: CalendarViewModel, summaryModel: SummaryViewModel, backupModel: BackupViewModel? = null) {
+fun TurnoApp(model: ConfigurationViewModel, importModel: ImportViewModel, reviewModel: ScheduleReviewViewModel, calendarModel: CalendarViewModel, summaryModel: SummaryViewModel, backupModel: BackupViewModel? = null,
+    accountModel: AccountViewModel? = null) {
     val state by model.state.collectAsStateWithLifecycle()
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
@@ -86,8 +88,11 @@ fun TurnoApp(model: ConfigurationViewModel, importModel: ImportViewModel, review
             composable("Ajustes") {
                 val calendarState by calendarModel.state.collectAsStateWithLifecycle()
                 SettingsScreen(model, state, onImport = { nav.navigate("Importar") }, onBack = { nav.popBackStack() },
-                    backup = backupModel, restoreBlockedReason = calendarState.let { calendarModel.restoreBlockedReason() })
+                    backup = backupModel, restoreBlockedReason = calendarState.let { calendarModel.restoreBlockedReason() },
+                    account = accountModel, onAccount = { nav.navigate("Cuenta") { launchSingleTop = true } })
             }
+            // Account options (informative while no provider exists; nothing here switches data).
+            accountModel?.let { account -> composable("Cuenta") { AccountScreen(account, onBack = { nav.popBackStack() }) } }
             composable("Importar") { ImportScreen(importModel, reviewModel::clear, { document ->
                 reviewModel.prepare(document, state.draft.name, state.draft.alias)
                 nav.navigate("Revisar")
