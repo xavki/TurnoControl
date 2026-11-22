@@ -34,7 +34,8 @@ import kotlinx.coroutines.launch
 /** What the account screen shows. Synthetic states are only constructed in tests until a real provider exists. */
 sealed interface AccountUiState {
     data object Guest : AccountUiState
-    data class Authenticated(val maskedEmail: String, val provider: String, val pendingChanges: Int?) : AccountUiState
+    /** Only values the local data actually provides; no remote status or synchronization time is shown. */
+    data class Authenticated(val maskedEmail: String, val provider: String, val pendingChanges: Int?, val conflicts: Int? = null) : AccountUiState
     data class Expired(val maskedEmail: String) : AccountUiState
 }
 
@@ -58,12 +59,13 @@ const val PROVIDERS_UNAVAILABLE = "Todavía no disponible: el inicio de sesión 
 
 fun AccountUiState.presentation(providersAvailable: Boolean): AccountPresentation = when (this) {
     AccountUiState.Guest -> AccountPresentation("Sin cuenta",
-        "Tus datos se guardan solo en este dispositivo. Crear una cuenta es opcional y servirá para sincronizarlos con otros dispositivos.",
+        "Tus datos se guardan en este dispositivo. Crear una cuenta es opcional y servirá para sincronizarlos con otros dispositivos.",
         providersAvailable, PROVIDERS_UNAVAILABLE.takeUnless { providersAvailable }, showContinueWithoutAccount = true, showSignOut = false, details = emptyList())
     is AccountUiState.Authenticated -> AccountPresentation("Sesión iniciada como $maskedEmail",
         "Los datos de esta cuenta se guardan aparte de los datos sin cuenta.", providersEnabled = false, providerNote = null,
         showContinueWithoutAccount = false, showSignOut = true,
-        details = listOfNotNull("Acceso con $provider", "Sincronización: todavía no disponible", pendingChanges?.let { "Cambios pendientes de sincronizar: $it" }))
+        details = listOfNotNull("Acceso con $provider", "Sincronización: todavía no disponible", pendingChanges?.let { "Cambios pendientes de sincronizar: $it" },
+            conflicts?.takeIf { it > 0 }?.let { "Conflictos sin resolver: $it" }))
     is AccountUiState.Expired -> AccountPresentation("Sesión caducada ($maskedEmail)", AccountProblem.SESSION_EXPIRED.message,
         providersAvailable, PROVIDERS_UNAVAILABLE.takeUnless { providersAvailable }, showContinueWithoutAccount = false, showSignOut = true, details = emptyList())
 }
@@ -146,14 +148,19 @@ fun AccountContent(state: AccountScreenState, onBack: () -> Unit, onSignOut: () 
                 }
             }
             if (state.account !is AccountUiState.Authenticated) {
-                Button(onClick = {}, enabled = presentation.providersEnabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("account-google")
-                    .semantics { contentDescription = if (presentation.providersEnabled) "Continuar con Google" else "Continuar con Google, todavía no disponible" }) { Text("Continuar con Google") }
-                OutlinedButton(onClick = {}, enabled = presentation.providersEnabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("account-email")
-                    .semantics { contentDescription = if (presentation.providersEnabled) "Correo electrónico" else "Correo electrónico, todavía no disponible" }) { Text("Correo electrónico") }
+                val signIn = if (state.account is AccountUiState.Expired) "Iniciar sesión de nuevo" else "Iniciar sesión"
+                Button(onClick = {}, enabled = presentation.providersEnabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("account-signin")
+                    .semantics { contentDescription = if (presentation.providersEnabled) signIn else "$signIn, todavía no disponible" }) { Text(signIn) }
+                if (state.account == AccountUiState.Guest) OutlinedButton(onClick = {}, enabled = presentation.providersEnabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("account-create")
+                    .semantics { contentDescription = if (presentation.providersEnabled) "Crear cuenta" else "Crear cuenta, todavía no disponible" }) { Text("Crear cuenta") }
                 presentation.providerNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.testTag("account-provider-note")) }
             }
             if (presentation.showContinueWithoutAccount) {
                 TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("account-guest")) { Text("Continuar sin cuenta") }
+            }
+            if (state.account is AccountUiState.Authenticated) {
+                OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("account-switch")
+                    .semantics { contentDescription = "Cambiar de cuenta, todavía no disponible" }) { Text("Cambiar de cuenta") }
             }
             if (presentation.showSignOut) {
                 OutlinedButton(onClick = onSignOut, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("account-signout")) { Text("Cerrar sesión") }

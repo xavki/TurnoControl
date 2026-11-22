@@ -74,10 +74,10 @@ class AccountUiTest {
         var back = 0
         render(AccountScreenState(), onBack = { back++ })
         compose.onNodeWithTag("account-status").assertTextEquals("Sin cuenta")
-        compose.onNodeWithTag("account-google").assertIsNotEnabled().assertHeightIsAtLeast(48.dp)
-        compose.onNodeWithTag("account-email").assertIsNotEnabled().assertHeightIsAtLeast(48.dp)
-        compose.onNodeWithContentDescription("Continuar con Google, todavía no disponible").assertExists()
-        compose.onNodeWithContentDescription("Correo electrónico, todavía no disponible").assertExists()
+        compose.onNodeWithTag("account-signin").assertIsNotEnabled().assertHeightIsAtLeast(48.dp)
+        compose.onNodeWithTag("account-create").assertIsNotEnabled().assertHeightIsAtLeast(48.dp)
+        compose.onNodeWithContentDescription("Iniciar sesión, todavía no disponible").assertExists()
+        compose.onNodeWithContentDescription("Crear cuenta, todavía no disponible").assertExists()
         compose.onNodeWithTag("account-provider-note").assertTextEquals(PROVIDERS_UNAVAILABLE)
         compose.onNodeWithTag("account-signout").assertDoesNotExist()
         compose.onNodeWithTag("account-guest").assertIsEnabled().assertHeightIsAtLeast(48.dp).performClick()
@@ -87,7 +87,7 @@ class AccountUiTest {
     @Test fun darkThemeRendersTheSameContent() {
         render(AccountScreenState(), dark = true)
         compose.onNodeWithText("Sin cuenta").assertExists()
-        compose.onNodeWithTag("account-google").assertIsNotEnabled()
+        compose.onNodeWithTag("account-signin").assertIsNotEnabled()
     }
 
     @Test fun authenticatedAndExpiredStatesShowSignOutAndMessages() {
@@ -95,7 +95,7 @@ class AccountUiTest {
         compose.onNodeWithText("Sesión iniciada como a***@example.invalid").assertExists()
         compose.onNodeWithText("Cambios pendientes de sincronizar: 3").assertExists()
         compose.onNodeWithTag("account-signout").assertIsEnabled().assertHeightIsAtLeast(48.dp)
-        compose.onNodeWithTag("account-google").assertDoesNotExist()
+        compose.onNodeWithTag("account-signin").assertDoesNotExist()
         compose.onNodeWithTag("account-message").assertTextEquals(AccountProblem.NETWORK.message)
     }
 
@@ -103,7 +103,7 @@ class AccountUiTest {
         render(AccountScreenState(AccountUiState.Expired("a***@example.invalid")))
         compose.onNodeWithText(AccountProblem.SESSION_EXPIRED.message).assertExists()
         compose.onNodeWithTag("account-signout").assertExists()
-        compose.onNodeWithTag("account-google").assertIsNotEnabled()
+        compose.onNodeWithTag("account-signin").assertIsNotEnabled()
     }
 
     // Sign-out outcomes (synthetic actions)
