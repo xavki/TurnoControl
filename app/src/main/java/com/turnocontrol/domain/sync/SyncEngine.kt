@@ -1,6 +1,16 @@
 package com.turnocontrol.domain.sync
 
 import java.time.LocalDate
+import java.util.UUID
+
+/** How operation ids are made. Persistent stores use [Random]; [Sequential] keeps JVM simulations deterministic. */
+fun interface OperationIds {
+    fun next(replica: Replica): String
+    companion object {
+        val Sequential = OperationIds { "${it.deviceId}-${it.nextOperation}" }
+        val Random = OperationIds { UUID.randomUUID().toString() }
+    }
+}
 
 /**
  * Everything one device stores for one account (the future Room side tables plus the domain rows). Immutable: every
@@ -23,7 +33,7 @@ data class Replica(
 enum class EditKind { CREATED, UPDATED, DELETED, NO_OP, BLOCKED_BY_CONFLICT, REJECTED }
 data class EditResult(val replica: Replica, val kind: EditKind, val error: String? = null)
 
-enum class SyncStatus { COMPLETED, INTERRUPTED, AUTH_REQUIRED, ACCOUNT_MISMATCH }
+enum class SyncStatus { COMPLETED, INTERRUPTED, AUTH_REQUIRED, ACCOUNT_MISMATCH, NOT_LINKED, REVIEW_REQUIRED }
 data class SyncResult(val replica: Replica, val status: SyncStatus, val error: String? = null) {
     /** Conflicts are never decided by the engine. */
     val requiresUserDecision: Boolean get() = replica.conflicts.isNotEmpty()
@@ -39,7 +49,7 @@ object SyncEngine {
     const val PAGE_SIZE = 500
 
     /** A local edit (null = delete). Validated across records, then queued if the server must learn about it. */
-    fun edit(replica: Replica, key: RecordKey, value: LocalRecord?): EditResult {
+    fun edit(replica: Replica, key: RecordKey, value: LocalRecord?, ids: OperationIds = OperationIds.Sequential): EditResult {
         if (key in replica.conflicts) return EditResult(replica, EditKind.BLOCKED_BY_CONFLICT, "Resuelve primero el conflicto de este registro.")
         val old = replica.records[key]
         if (old == value) return EditResult(replica, EditKind.NO_OP)
@@ -47,14 +57,16 @@ object SyncEngine {
         val records = if (value == null) replica.records - key else replica.records + (key to value)
         SyncRules.validate(records)?.let { return EditResult(replica, EditKind.REJECTED, it) }
         val kind = when { value == null -> EditKind.DELETED; old == null -> EditKind.CREATED; else -> EditKind.UPDATED }
-        return EditResult(stage(replica.copy(records = records), key, value), kind)
+        return EditResult(stage(replica.copy(records = records), key, value, ids), kind)
     }
 
     /**
      * Brings the outbox in line with the desired local content of [key]. A tombstone is queued only for an actual
      * deletion (null); every stored state, sick leave included, is an upsert.
      */
-    private fun stage(replica: Replica, key: RecordKey, value: LocalRecord?): Replica {
+    fun stageChange(replica: Replica, key: RecordKey, value: LocalRecord?, ids: OperationIds): Replica = stage(replica, key, value, ids)
+
+    private fun stage(replica: Replica, key: RecordKey, value: LocalRecord?, ids: OperationIds): Replica {
         val inFlight = replica.outbox.lastOrNull { it.key == key && it.state == ChangeState.IN_FLIGHT }
         val outbox = replica.outbox.filterNot { it.key == key && it.state == ChangeState.PENDING } // Unsent edits coalesce.
         val known = replica.known[key]
@@ -62,7 +74,7 @@ object SyncEngine {
         val serverPayload = if (inFlight != null) inFlight.payload else known?.takeIf { !it.deleted }?.payload
         val desired = (value as LocalRecord.Shared?)?.payload
         if (desired == serverPayload) return replica.copy(outbox = outbox)
-        val change = PendingChange(operationId = "${replica.deviceId}-${replica.nextOperation}", key = key,
+        val change = PendingChange(operationId = ids.next(replica), key = key,
             op = if (desired == null) ChangeOp.DELETE else ChangeOp.UPSERT, payload = desired,
             baseVersion = if (inFlight != null) null else known?.version, afterPredecessor = inFlight != null)
         return replica.copy(outbox = outbox + change, nextOperation = replica.nextOperation + 1)
@@ -76,20 +88,14 @@ object SyncEngine {
         var current = replica
         return try {
             repeat(replica.outbox.size + 1) {
-                val batch = nextBatch(current, batchSize)
-                if (batch.isEmpty()) return@repeat
-                // Marked as in flight before sending: after a lost response the same operation ids are resent.
-                current = current.copy(outbox = current.outbox.map { c -> if (batch.any { it.operationId == c.operationId }) c.copy(state = ChangeState.IN_FLIGHT, attempts = c.attempts + 1) else c })
-                val sent = batch.map { b -> current.outbox.first { it.operationId == b.operationId } }
-                val results = transport.push(current.deviceId, sent.map { PushRequest(it.operationId, it.key, it.op, it.payload, it.baseVersion) }).associateBy { it.operationId }
-                if (sent.any { it.operationId !in results }) throw SyncTransportException("Respuesta incompleta del servidor.")
-                current = sent.fold(current) { r, change -> applyResult(r, change, results.getValue(change.operationId)) }
+                val (marked, sent) = prepareBatch(current, batchSize)
+                if (sent.isEmpty()) return@repeat
+                current = marked
+                current = applyPushResults(current, sent, transport.push(current.deviceId, requests(sent)))
             }
             while (true) {
                 val page = transport.pull(current.cursor, pageSize)
-                if (page.hasMore && page.nextCursor <= current.cursor) throw SyncTransportException("El servidor no avanzó el cursor.")
-                // One page = one transaction: the records and the cursor are committed together.
-                current = page.changes.fold(current) { r, remote -> applyRemote(r, remote) }.copy(cursor = maxOf(current.cursor, page.nextCursor))
+                current = applyPage(current, page)
                 if (!page.hasMore) break
             }
             SyncResult(current, SyncStatus.COMPLETED)
@@ -98,6 +104,35 @@ object SyncEngine {
         } catch (e: SyncTransportException) {
             SyncResult(current, SyncStatus.INTERRUPTED, e.message)
         }
+    }
+
+    /*
+     * The steps of [sync], exposed so a persistent store can commit each one in its own transaction with the network
+     * call outside: (1) mark a batch in flight and commit, (2) push, (3) apply the results to the freshly reloaded
+     * state, then for each page (4) pull and (5) apply it with its cursor to the freshly reloaded state.
+     */
+
+    /** Marks the next batch in flight (persist this before sending). Returns the sent changes; empty when nothing is due. */
+    fun prepareBatch(replica: Replica, batchSize: Int = BATCH_SIZE): Pair<Replica, List<PendingChange>> {
+        val batch = nextBatch(replica, batchSize).map { it.operationId }.toSet()
+        if (batch.isEmpty()) return replica to emptyList()
+        val marked = replica.copy(outbox = replica.outbox.map { c -> if (c.operationId in batch) c.copy(state = ChangeState.IN_FLIGHT, attempts = c.attempts + 1) else c })
+        return marked to marked.outbox.filter { it.operationId in batch }
+    }
+
+    fun requests(sent: List<PendingChange>) = sent.map { PushRequest(it.operationId, it.key, it.op, it.payload, it.baseVersion) }
+
+    /** Applies push results by operation id. [replica] may contain edits made while the push was in progress. */
+    fun applyPushResults(replica: Replica, sent: List<PendingChange>, results: List<PushResult>): Replica {
+        val byId = results.associateBy { it.operationId }
+        if (sent.any { it.operationId !in byId }) throw SyncTransportException("Respuesta incompleta del servidor.")
+        return sent.fold(replica) { r, change -> applyResult(r, change, byId.getValue(change.operationId)) }
+    }
+
+    /** Applies one pulled page and advances the cursor (commit both together). */
+    fun applyPage(replica: Replica, page: PullPage): Replica {
+        if (page.hasMore && page.nextCursor <= replica.cursor) throw SyncTransportException("El servidor no avanzó el cursor.")
+        return page.changes.fold(replica) { r, remote -> applyRemote(r, remote) }.copy(cursor = maxOf(replica.cursor, page.nextCursor))
     }
 
     /** The first queued change of each key, so one batch never holds two changes for the same record. */
@@ -165,8 +200,17 @@ object SyncEngine {
         return adopt(replica.copy(records = records), key, remote)
     }
 
+    /**
+     * Re-evaluates quarantined records after this build gained support for them. Each one goes through the normal
+     * incoming path again: still unreadable -> back to quarantine; conflicting -> conflict; valid -> applied once.
+     */
+    fun replayQuarantined(replica: Replica, keys: Set<RecordKey>): Replica = keys.fold(replica) { r, key ->
+        val held = r.quarantine[key] ?: return@fold r
+        applyRemote(r.copy(quarantine = r.quarantine - key), held)
+    }
+
     /** Applies an explicit user decision. The losing content is kept in [Replica.recovered]. */
-    fun resolve(replica: Replica, key: RecordKey, resolution: Resolution, today: LocalDate): ResolutionResult {
+    fun resolve(replica: Replica, key: RecordKey, resolution: Resolution, today: LocalDate, ids: OperationIds = OperationIds.Sequential): ResolutionResult {
         val conflict = replica.conflicts[key] ?: return ResolutionResult(replica, ResolutionOutcome.NO_CONFLICT)
         if (resolution == Resolution.CANCEL) return ResolutionResult(replica, ResolutionOutcome.CANCELLED)
         // A newer version pulled while the conflict was open is always the other side. For a refused change with no
@@ -181,7 +225,7 @@ object SyncEngine {
                 SyncRules.validate(replica.records)?.let { return ResolutionResult(replica, ResolutionOutcome.REJECTED, it) }
                 val base = adopt(replica.copy(conflicts = replica.conflicts - key,
                     recovered = replica.recovered + RecoveredVersion(key, RecoverySource.REMOTE, remoteContent, today)), key, remote)
-                ResolutionResult(stage(base, key, local), ResolutionOutcome.KEPT_LOCAL)
+                ResolutionResult(stage(base, key, local, ids), ResolutionOutcome.KEPT_LOCAL)
             }
             Resolution.KEEP_REMOTE -> {
                 val records = if (remoteContent == null) replica.records - key else replica.records + (key to remoteContent)

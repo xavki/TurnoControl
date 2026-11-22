@@ -20,6 +20,10 @@ data class DayRecord(val day: PlannedDay, val origin: String = "MANUAL")
 data class RateRecord(val type: String, val validFrom: LocalDate, val validUntil: LocalDate?, val amount: BigDecimal, val currency: String = "EUR")
 /** A payslip entered by the user; identity is the pay period. */
 data class PayslipRecord(val period: YearMonth, val gross: BigDecimal?, val net: BigDecimal?)
+/** The account's single profile (decision D7: relevant profile details only). */
+data class ProfileRecord(val displayName: String, val alias: String, val zoneId: String)
+/** The account's single contract. */
+data class ContractRecord(val type: String, val agreedMinutes: Long, val unit: String, val validFrom: LocalDate, val validUntil: LocalDate?)
 
 /**
  * Canonical text codecs. Encoding is deterministic, so equal content always gives equal payloads (used for
@@ -36,20 +40,23 @@ object SyncCodecs {
     fun dayKey(date: LocalDate) = RecordKey(SyncEntity.SCHEDULED_DAY, date.toString())
     fun rateKey(type: String, validFrom: LocalDate) = RecordKey(SyncEntity.PAY_RULE, "$type@$validFrom")
     fun payslipKey(period: YearMonth) = RecordKey(SyncEntity.PAYSLIP, period.toString())
+    val profileKey = RecordKey(SyncEntity.PROFILE, "profile")
+    val contractKey = RecordKey(SyncEntity.CONTRACT, "contract")
 
     // Calendar days. Format: 1|date|kind|origin|HH:MM+o-HH:MM+o:E,... (E = declared extra, N = regular)
 
     /**
      * Allowlisted serialization: only date, state, intervals and origin are written; nothing else of the domain
-     * object can reach a payload. A sick-leave day is written as date + SICK_LEAVE (no intervals, fixed origin).
+     * object can reach a payload. A sick-leave day is written as date + SICK_LEAVE only: its origin is not
+     * synchronized (always written as MANUAL), so a stored OCR_REVIEWED provenance stays on the device.
      */
     fun encodeDay(record: DayRecord): LocalRecord.Shared {
         val day = record.day
         require(day.kind in shareableDayKinds) { "Un día sin configurar no se guarda." }
         require(record.origin in origins) { "Origen desconocido «${record.origin}»." }
-        require(day.kind != DayKind.SICK_LEAVE || record.origin == SICK_LEAVE_ORIGIN) { "Una baja médica solo se marca a mano." }
         PlannedScheduleValidator.validate(listOf(day))?.let { throw IllegalArgumentException(it) }
-        return LocalRecord.Shared(SyncPayload(SyncEntity.SCHEDULED_DAY, dayText(record)))
+        val shared = if (day.kind == DayKind.SICK_LEAVE) record.copy(origin = SICK_LEAVE_ORIGIN) else record
+        return LocalRecord.Shared(SyncPayload(SyncEntity.SCHEDULED_DAY, dayText(shared)))
     }
 
     /** Strict decoding: unknown states, extra fields or extra data on a sick-leave day are refused, never reinterpreted. */
@@ -139,6 +146,46 @@ object SyncCodecs {
         require(listOfNotNull(slip.gross, slip.net).all { it.signum() >= 0 && it.stripTrailingZeros().scale() <= 2 }) { "Importe de nómina no admitido." }
     }
 
+    // Profile and contract. Text fields are escaped so a separator inside a name cannot add a field.
+
+    private fun escape(value: String) = value.replace("%", "%25").replace("|", "%7C").replace("\n", "%0A").replace("\r", "%0D")
+    private fun unescape(value: String): String {
+        if (Regex("%(?!25|7C|0A|0D)").containsMatchIn(value)) throw SyncFormatException("Texto con codificación no admitida.")
+        return value.replace("%7C", "|").replace("%0A", "\n").replace("%0D", "\r").replace("%25", "%")
+    }
+
+    fun encodeProfile(profile: ProfileRecord): LocalRecord.Shared {
+        require(profile.displayName.isNotBlank() && profile.displayName.length <= 200 && profile.alias.length <= 200) { "Perfil no válido." }
+        require(runCatching { java.time.ZoneId.of(profile.zoneId) }.isSuccess) { "Zona horaria no válida." }
+        return LocalRecord.Shared(SyncPayload(SyncEntity.PROFILE, listOf("1", escape(profile.displayName), escape(profile.alias), profile.zoneId).joinToString("|")))
+    }
+
+    fun decodeProfile(key: RecordKey, payload: SyncPayload): ProfileRecord {
+        val parts = payload.text.split("|")
+        if (key != profileKey || parts.size != 4 || parts[0] != "1") throw SyncFormatException("Formato de perfil no admitido.")
+        val profile = ProfileRecord(unescape(parts[1]), unescape(parts[2]), parts[3])
+        val encoded = runCatching { encodeProfile(profile) }.getOrElse { throw SyncFormatException(it.message ?: "Perfil no válido.") }
+        if (encoded.payload != payload) throw SyncFormatException("El perfil no está en forma canónica.")
+        return profile
+    }
+
+    fun encodeContract(contract: ContractRecord): LocalRecord.Shared {
+        require(contract.type in setOf("PARTIAL", "FULL") && contract.unit in setOf("WEEK", "MONTH", "YEAR") && contract.agreedMinutes > 0) { "Contrato no válido." }
+        require(contract.validUntil == null || !contract.validUntil.isBefore(contract.validFrom)) { "Vigencia de contrato invertida." }
+        return LocalRecord.Shared(SyncPayload(SyncEntity.CONTRACT, listOf("1", contract.type, contract.agreedMinutes.toString(), contract.unit,
+            contract.validFrom.toString(), contract.validUntil?.toString() ?: "-").joinToString("|")))
+    }
+
+    fun decodeContract(key: RecordKey, payload: SyncPayload): ContractRecord {
+        val parts = payload.text.split("|")
+        if (key != contractKey || parts.size != 6 || parts[0] != "1") throw SyncFormatException("Formato de contrato no admitido.")
+        val contract = runCatching { ContractRecord(parts[1], parts[2].toLong(), parts[3], LocalDate.parse(parts[4]), parts[5].takeIf { it != "-" }?.let(LocalDate::parse)) }
+            .getOrElse { throw SyncFormatException("Contrato no válido.") }
+        val encoded = runCatching { encodeContract(contract) }.getOrElse { throw SyncFormatException(it.message ?: "Contrato no válido.") }
+        if (encoded.payload != payload) throw SyncFormatException("El contrato no está en forma canónica.")
+        return contract
+    }
+
     /** Server-side style check of one shared payload (no cross-record rules). Null when acceptable. */
     fun validationError(key: RecordKey, payload: SyncPayload, dataFormat: Int = SYNC_DATA_FORMAT): String? {
         if (dataFormat > SYNC_DATA_FORMAT) return "Formato de datos $dataFormat más nuevo que el admitido ($SYNC_DATA_FORMAT)."
@@ -148,6 +195,8 @@ object SyncCodecs {
                 SyncEntity.SCHEDULED_DAY -> decodeDay(key, payload)
                 SyncEntity.PAY_RULE -> decodeRate(key, payload)
                 SyncEntity.PAYSLIP -> decodePayslip(key, payload)
+                SyncEntity.PROFILE -> decodeProfile(key, payload)
+                SyncEntity.CONTRACT -> decodeContract(key, payload)
             }
             null
         } catch (e: SyncFormatException) { e.message }

@@ -19,7 +19,7 @@ import java.time.LocalDate
 /** Data format of synchronized payloads understood by this version. Newer payloads are quarantined, never coerced. */
 const val SYNC_DATA_FORMAT = 1
 
-enum class SyncEntity { SCHEDULED_DAY, PAY_RULE, PAYSLIP }
+enum class SyncEntity { SCHEDULED_DAY, PAY_RULE, PAYSLIP, PROFILE, CONTRACT }
 
 /** Natural key inside one account: the account itself is never part of what a client sends. */
 data class RecordKey(val entity: SyncEntity, val key: String) {

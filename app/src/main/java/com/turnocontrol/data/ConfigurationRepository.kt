@@ -7,6 +7,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import com.turnocontrol.domain.*
+import androidx.room.withTransaction
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -39,9 +40,17 @@ class ConfigurationRepository internal constructor(private val db: TurnoDatabase
             taken += id
             amount.takeIf { it.isNotBlank() }?.let { PayRule(id = id, type = type, amountDecimal = decimal(it).toPlainString(), mode = if (type in listOf("NIGHT", "SPECIAL_NIGHT", "EXTRA_PAY")) "PLUS" else "BASE", accumulation = "UNDEFINED", validFrom = draft.from) }
         }
-        db.configuration().saveConfiguration(Profile(displayName = draft.name.trim(), alias = draft.alias.trim(), zoneId = draft.zone),
-            Contract(type = draft.type, agreedMinutes = decimal(draft.hours).multiply(BigDecimal(60)).longValueExact(), unit = draft.unit, validFrom = draft.from),
-            rates)
+        db.withTransaction {
+            // Diff-based capture: rewriting unchanged settings produces no outgoing change.
+            val before = if (SyncCapture.isLinked(db)) SyncRecords.configuration(db) else null
+            db.configuration().saveConfiguration(Profile(displayName = draft.name.trim(), alias = draft.alias.trim(), zoneId = draft.zone),
+                Contract(type = draft.type, agreedMinutes = decimal(draft.hours).multiply(BigDecimal(60)).longValueExact(), unit = draft.unit, validFrom = draft.from),
+                rates)
+            if (before != null) {
+                val after = SyncRecords.configuration(db)
+                SyncCapture.record(db, (before.keys + after.keys).filter { before[it] != after[it] }.associateWith { after[it] })
+            }
+        }
     }
     val darkTheme = preferences.data.map { it[booleanPreferencesKey("dark_theme")] ?: false }
     suspend fun setDarkTheme(enabled: Boolean) { preferences.edit { it[booleanPreferencesKey("dark_theme")] = enabled } }

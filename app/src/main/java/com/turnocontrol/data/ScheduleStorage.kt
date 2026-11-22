@@ -23,6 +23,7 @@ interface ScheduleDao {
     @Transaction @Query("SELECT * FROM ScheduledDay WHERE profileId = 1 ORDER BY date")
     suspend fun all(): List<StoredScheduleDay>
     @Query("SELECT * FROM Profile WHERE id = 1") suspend fun profile(): Profile?
+    @Query("SELECT * FROM ScheduledDay WHERE profileId = 1 AND date = :date") suspend fun day(date: String): ScheduledDay?
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertProfile(profile: Profile)
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertDay(day: ScheduledDay): Long
     @Update suspend fun updateDay(day: ScheduledDay)

@@ -551,7 +551,8 @@ class SyncEngineTest {
         // Structural allowlist: the synchronized day model has no field that could hold medical information.
         assertEquals(setOf("day", "origin"), DayRecord::class.java.declaredFields.map { it.name }.filterNot { it.startsWith("$") }.toSet())
         assertEquals(setOf("date", "kind", "intervals"), PlannedDay::class.java.declaredFields.map { it.name }.filterNot { it.startsWith("$") }.toSet())
-        assertThrows(IllegalArgumentException::class.java) { SyncCodecs.encodeDay(DayRecord(PlannedDay(LocalDate.parse("2026-12-10"), DayKind.SICK_LEAVE, emptyList()), "OCR_REVIEWED")) }
+        // A locally stored OCR_REVIEWED provenance is not synchronized for sick leave: the payload stays date + state.
+        assertEquals(sickPayloadText, SyncCodecs.encodeDay(DayRecord(PlannedDay(LocalDate.parse("2026-12-10"), DayKind.SICK_LEAVE, emptyList()), "OCR_REVIEWED")).payload.text)
     }
 
     @Test fun t25_sickLeaveStaysInsideItsAccount() {

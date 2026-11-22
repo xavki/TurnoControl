@@ -59,6 +59,19 @@ class SyncCodecsTest {
         assertThrows(IllegalArgumentException::class.java) { SyncCodecs.encodePayslip(PayslipRecord(YearMonth.of(2026, 2), null, null)) }
     }
 
+    @Test fun profileAndContractEscapeSeparatorsAndStayStrict() {
+        val profile = ProfileRecord("Ana | 100% turno", "A|B", "Europe/Madrid")
+        val encoded = SyncCodecs.encodeProfile(profile)
+        assertEquals("1|Ana %7C 100%25 turno|A%7CB|Europe/Madrid", encoded.payload.text)
+        assertEquals(profile, SyncCodecs.decodeProfile(SyncCodecs.profileKey, encoded.payload))
+        assertNotNull(SyncCodecs.validationError(SyncCodecs.profileKey, SyncPayload(SyncEntity.PROFILE, "1|Ana|%41|UTC")))
+        assertNotNull(SyncCodecs.validationError(SyncCodecs.profileKey, SyncPayload(SyncEntity.PROFILE, "1|Ana||UTC|extra")))
+        assertNotNull(SyncCodecs.validationError(SyncCodecs.profileKey, SyncPayload(SyncEntity.PROFILE, "1|Ana||Mars/Olympus")))
+        val contract = SyncCodecs.encodeContract(ContractRecord("FULL", 2400, "WEEK", LocalDate.parse("2026-01-01"), null))
+        assertEquals("1|FULL|2400|WEEK|2026-01-01|-", contract.payload.text)
+        assertNotNull(SyncCodecs.validationError(SyncCodecs.contractKey, SyncPayload(SyncEntity.CONTRACT, "1|FULL|0|WEEK|2026-01-01|-")))
+    }
+
     @Test fun overlappingRatePeriodsAreInvalidAcrossRecords() {
         val open = SyncCodecs.encodeRate(RateRecord("HOURLY_BASE", LocalDate.parse("2026-01-01"), null, BigDecimal.TEN))
         val later = SyncCodecs.encodeRate(RateRecord("HOURLY_BASE", LocalDate.parse("2026-04-01"), null, BigDecimal("11")))

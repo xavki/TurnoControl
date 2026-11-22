@@ -2,6 +2,10 @@ package com.turnocontrol.data
 
 import androidx.room.withTransaction
 import com.turnocontrol.domain.*
+import com.turnocontrol.domain.sync.DayRecord
+import com.turnocontrol.domain.sync.LocalRecord
+import com.turnocontrol.domain.sync.RecordKey
+import com.turnocontrol.domain.sync.SyncCodecs
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
@@ -21,7 +25,12 @@ class ScheduleRepository @Inject constructor(private val db: TurnoDatabase) {
     suspend fun snapshot() = db.schedule().all().canonical()
     private fun List<StoredScheduleDay>.canonical() = sortedBy { it.day.date }.map { it.copy(intervals = it.intervals.sortedBy { i -> i.position }) }
 
-    /** Expected snapshot covers adjacent overnight shifts too. Entire batch succeeds or fails. */
+    /**
+     * Entire batch succeeds or fails. The snapshot check covers the changed dates and their neighbours (an interval
+     * lasts at most until the next day, so only adjacent days can interact); unrelated days written meanwhile, e.g.
+     * by synchronization, do not reject the edit. The resulting calendar is still validated in full. If the database
+     * is linked to an account, the outgoing changes are recorded in this same transaction.
+     */
     suspend fun save(expected: List<StoredScheduleDay>, replacements: List<PlannedDay>, deletions: Set<LocalDate> = emptySet(), origin: String = "MANUAL") {
         require(origin in setOf("MANUAL", "OCR_REVIEWED"))
         require(replacements.map { it.date }.toSet().intersect(deletions).isEmpty())
@@ -29,8 +38,10 @@ class ScheduleRepository @Inject constructor(private val db: TurnoDatabase) {
         db.withTransaction {
             val dao = db.schedule()
             val current = dao.all().canonical()
-            if (current != expected.canonical()) throw ScheduleChangedException()
             val changed = replacements.map { it.date }.toSet() + deletions
+            val window = changed.flatMap { listOf(it.minusDays(1), it, it.plusDays(1)) }.map { it.toString() }.toSet()
+            fun List<StoredScheduleDay>.affected() = filter { it.day.date in window }
+            if (current.affected() != expected.canonical().affected()) throw ScheduleChangedException()
             val finalDays = current.filter { LocalDate.parse(it.day.date) !in changed }.map { it.planned() } + replacements
             PlannedScheduleValidator.validate(finalDays)?.let { throw IllegalArgumentException(it) }
             if (replacements.isNotEmpty() && dao.profile() == null) {
@@ -38,10 +49,15 @@ class ScheduleRepository @Inject constructor(private val db: TurnoDatabase) {
                 dao.insertProfile(Profile(displayName = "Mi calendario", alias = "", zoneId = ZoneId.systemDefault().id))
             }
             val zone = dao.profile()?.zoneId ?: ZoneId.systemDefault().id
-            current.filter { LocalDate.parse(it.day.date) in deletions }.forEach { dao.deleteDay(it.day.id) }
+            val outgoing = mutableMapOf<RecordKey, LocalRecord?>()
+            current.filter { LocalDate.parse(it.day.date) in deletions }.forEach {
+                dao.deleteDay(it.day.id)
+                outgoing[SyncCodecs.dayKey(LocalDate.parse(it.day.date))] = null
+            }
             replacements.forEach { proposed ->
                 val old = current.firstOrNull { it.day.date == proposed.date.toString() }
                 if (old?.planned() != proposed) {
+                    outgoing[SyncCodecs.dayKey(proposed.date)] = SyncCodecs.encodeDay(DayRecord(proposed, origin))
                     val row = ScheduledDay(id = old?.day?.id ?: 0, date = proposed.date.toString(), kind = proposed.kind.name,
                         zoneId = old?.day?.zoneId ?: zone, origin = origin, revision = (old?.day?.revision ?: 0) + 1)
                     val id = if (old == null) dao.insertDay(row) else { dao.updateDay(row); row.id }
@@ -52,6 +68,7 @@ class ScheduleRepository @Inject constructor(private val db: TurnoDatabase) {
                     })
                 }
             }
+            SyncCapture.record(db, outgoing)
         }
     }
 }
