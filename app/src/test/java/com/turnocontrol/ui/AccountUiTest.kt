@@ -1,6 +1,8 @@
 package com.turnocontrol.ui
 
 import android.content.Context
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
@@ -159,7 +161,8 @@ class AccountUiTest {
             val account = model(authenticated) { SwitchOutcome.Busy("x") }
             var opened = 0
             compose.setContent { TurnoTheme(false) {
-                SettingsScreen(configuration, configuration.state.value, onImport = {}, onBack = {}, account = account, onAccount = { opened++ })
+                val state by configuration.state.collectAsState()
+                SettingsScreen(configuration, state, onImport = {}, onBack = {}, account = account, onAccount = { opened++ })
             } }
             compose.onNodeWithTag("account-summary").assertExists()
             compose.onNodeWithText("Opciones de cuenta").assertHeightIsAtLeast(48.dp).performClick()

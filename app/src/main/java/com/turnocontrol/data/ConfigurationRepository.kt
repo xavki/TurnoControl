@@ -19,6 +19,8 @@ private val Context.preferences by preferencesDataStore("preferences")
 @Singleton
 class ConfigurationRepository internal constructor(private val db: TurnoDatabase, private val preferences: DataStore<Preferences>, private val gate: OperationGate = OperationGate()) {
     @Inject constructor(db: TurnoDatabase, @ApplicationContext context: Context, gate: OperationGate) : this(db, context.preferences, gate)
+    /** For callers outside Hilt (instrumented tests): its own gate, as before account storage existed. */
+    constructor(db: TurnoDatabase, context: Context) : this(db, context.preferences, OperationGate())
     val profile = db.configuration().observeProfile()
     val rates = db.configuration().observeRates().map { rules -> rules.associate { it.type to it.amountDecimal } }
     suspend fun load(profile: Profile): ConfigurationDraft {
