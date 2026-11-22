@@ -29,7 +29,7 @@ class RestartPersistenceTest {
         require(mode == null || mode in listOf("seed", "verify"))
         // Normal suite uses its own DB; host phases exercise the app's actual DB.
         val name = if (mode == null) "restart-suite.db" else "turnocontrol.db"
-        fun open() = Room.databaseBuilder(context, TurnoDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+        fun open() = Room.databaseBuilder(context, TurnoDatabase::class.java, name).addMigrations(*ALL_MIGRATIONS).build()
         if (mode != "verify") {
             val db = open()
             try {

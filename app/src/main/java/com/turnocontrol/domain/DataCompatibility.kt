@@ -9,7 +9,11 @@ object DataFormat {
     const val CURRENT = 2
     /** SQLite `application_id` marker: "TC" in the high bytes, data format in the low bytes. Room does not use it. */
     const val APPLICATION_ID_MAGIC = 0x54430000
-    const val ROOM_SCHEMA_VERSION = 4
+    /**
+     * Room schema. Independent of [CURRENT] (stored values), the backup format (BackupCodec.FORMAT_VERSION) and the
+     * synchronization payload format (sync.SYNC_DATA_FORMAT): 5 adds only the local synchronization tables.
+     */
+    const val ROOM_SCHEMA_VERSION = 5
     fun applicationId(format: Int = CURRENT) = APPLICATION_ID_MAGIC or format
 
     val persistedDayKinds: Set<DayKind> = setOf(DayKind.WORK, DayKind.FREE, DayKind.VACATION, DayKind.SICK_LEAVE)

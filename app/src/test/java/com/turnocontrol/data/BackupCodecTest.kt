@@ -61,7 +61,7 @@ class BackupCodecTest {
 
     @Test fun futureAndUnsupportedVersionsAreRejectedSafely() {
         rejected(JSONObject(text).put("formatVersion", 2).toString(), "más nueva")
-        rejected(JSONObject(text).put("schemaVersion", 5).toString(), "más nueva")
+        rejected(JSONObject(text).put("schemaVersion", DataFormat.ROOM_SCHEMA_VERSION + 1).toString(), "más nueva")
         rejected(JSONObject(text).put("schemaVersion", 3).toString(), "no admitida")
         rejected(JSONObject(text).put("dataFormat", DataFormat.CURRENT + 1).toString(), "más nueva")
     }

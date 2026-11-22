@@ -69,6 +69,26 @@ class LegacyBackupCompatibilityTest {
         assertEquals(3, db.backup().intervals().size)
     }
 
+    @Test fun restoreNeverReplaysStaleOperationsOrImpersonatesTheDevice() = runTest {
+        // Unlinked database: restore creates no synchronization state at all.
+        repository().restore(read(legacyText()))
+        assertNull(db.sync().state())
+        // Linked database with pending work: the restore keeps identity and server knowledge, drops the stale queue,
+        // and holds synchronization for an explicit review instead of uploading the restored data.
+        val state = SyncState(deviceId = "00000000-0000-4000-8000-000000000001", accountId = "cuenta-sintetica", cursor = 9, nextOperation = 4, restoreReviewRequired = false, linkedAt = "2026-11-22T09:00:00Z")
+        db.sync().insertState(state)
+        db.sync().insertRecordStates(listOf(SyncRecordState("SCHEDULED_DAY", "2026-03-02", 3, false, "1|2026-03-02|FREE|MANUAL|")))
+        db.sync().insertOutbox(listOf(SyncOutbox(operationId = "a3c4b9e2-0000-4000-8000-000000000002", entity = "SCHEDULED_DAY", recordKey = "2026-03-02", op = "UPSERT",
+            payload = "1|2026-03-02|VACATION|MANUAL|", baseVersion = 3, afterPredecessor = false, state = "PENDING", attempts = 0)))
+        db.sync().insertConflicts(listOf(SyncConflictRow("SCHEDULED_DAY", "2026-03-03", "VERSION", null, 2, 5, false, 1, "1|2026-03-03|FREE|MANUAL|", "x", null)))
+        repository().restore(read(legacyText()))
+        assertEquals(state.copy(restoreReviewRequired = true), db.sync().state())
+        assertTrue(db.sync().outbox().isEmpty())
+        assertTrue(db.sync().conflicts().isEmpty())
+        assertEquals(1, db.sync().recordStates().size)
+        assertEquals(legacy.normalized(), repository().snapshot()) // The backup itself never carries synchronization state.
+    }
+
     @Test fun legacyBackupsKeepEveryIntegrityCheck() = runTest {
         val repository = repository()
         repository.restore(read(legacyText()))

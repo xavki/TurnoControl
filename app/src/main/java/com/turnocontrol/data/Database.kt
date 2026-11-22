@@ -28,6 +28,8 @@ interface ConfigurationDao {
         if (rate == null) deleteRate() else putRate(rate)
     }
     @Query("DELETE FROM PayRule WHERE id = 1") suspend fun deleteRate()
+    @Query("DELETE FROM PayRule WHERE id = :id") suspend fun deleteRateById(id: Long)
+    @Query("DELETE FROM Contract WHERE id = 1") suspend fun deleteContract()
     @Query("DELETE FROM PayRule WHERE profileId = 1 AND type IN (:types)") suspend fun deleteRates(types: Collection<String>)
     /** Replaces only the rate types this version manages; rows written by a newer version are preserved. */
     @Transaction suspend fun saveConfiguration(profile: Profile, contract: Contract, rates: List<PayRule>, managedTypes: Collection<String> = DataFormat.knownRateTypes) {
@@ -63,9 +65,11 @@ interface BackupDao {
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertIntervals(rows: List<ScheduledInterval>)
 }
 
-@Database(entities = [Profile::class, Contract::class, PayRule::class, ScheduledDay::class, ScheduledInterval::class], version = 4, exportSchema = true)
+@Database(entities = [Profile::class, Contract::class, PayRule::class, ScheduledDay::class, ScheduledInterval::class,
+    SyncState::class, SyncRecordState::class, SyncOutbox::class, SyncConflictRow::class, SyncQuarantine::class, SyncRecovered::class], version = 5, exportSchema = true)
 abstract class TurnoDatabase : RoomDatabase() {
     abstract fun configuration(): ConfigurationDao
     abstract fun schedule(): ScheduleDao
     abstract fun backup(): BackupDao
+    abstract fun sync(): SyncDao
 }

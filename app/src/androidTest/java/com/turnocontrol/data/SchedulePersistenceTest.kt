@@ -36,7 +36,7 @@ class SchedulePersistenceTest {
             }
             queries.map { rows(old, it) }
         } finally { old.close() }
-        val migrated = migrations.runMigrationsAndValidate(name, 4, true, MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        val migrated = migrations.runMigrationsAndValidate(name, 5, true, *ALL_MIGRATIONS)
         try {
             assertEquals(before, queries.map { rows(migrated, it) })
             assertEquals(List(5) { listOf("EUR") }, rows(migrated, "SELECT currency FROM PayRule ORDER BY id"))

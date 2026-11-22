@@ -34,7 +34,8 @@ Se conservan los identificadores originales y, con ellos, las relaciones entre r
 }
 ```
 
-- `schemaVersion` es la versión de Room.
+- `schemaVersion` es la versión de Room de la app que creó la copia. Se admiten las copias de formato 1 de los esquemas 4 (TurnoControl 0.2.0) a 5: sus secciones de datos son idénticas, porque el esquema 5 solo añade tablas locales de sincronización.
+- Las copias **no** incluyen el estado de sincronización: identificador del dispositivo, cola de cambios pendientes, cursor, conflictos ni cuarentena. Al restaurar en una base vinculada a una cuenta se descartan la cola y los conflictos, y la sincronización queda en espera de una revisión explícita. Una restauración nunca sube datos ni sobrescribe la cuenta remota por sí sola.
 - `dataFormat` es el formato de los valores guardados: 1 corresponde a 0.1.0 y 2 a 0.2.0.
 - `integrity.data` es el SHA-256 de una serialización canónica de `data`: claves ordenadas, sin espacios, solo enteros, cadenas, booleanos y `null`. Detecta archivos dañados o incompletos. **No es una firma**: no protege contra modificaciones deliberadas.
 - Los importes se guardan como cadenas decimales.

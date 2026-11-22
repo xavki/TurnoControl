@@ -24,7 +24,7 @@ class CompatibilityCheckerTest {
     private val opened = mutableListOf<TurnoDatabase>()
     @After fun cleanup() { opened.forEach { it.close() } }
     private fun open(name: String) = Room.databaseBuilder(context, TurnoDatabase::class.java, name)
-        .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).allowMainThreadQueries().build().also { opened += it }
+        .addMigrations(*ALL_MIGRATIONS).allowMainThreadQueries().build().also { opened += it }
     private fun fresh(name: String): TurnoDatabase { context.deleteDatabase(name); return open(name) }
     private fun raw(name: String) = context.openOrCreateDatabase(name, 0, null)
     private suspend fun seed(db: TurnoDatabase) {
@@ -78,14 +78,14 @@ class CompatibilityCheckerTest {
     }
 
     @Test fun newerRoomSchemaVersionIsReportedNotCrashedAndFileIsPreserved() {
-        val name = "compat-room-v5.db"
+        val name = "compat-room-future.db"
         context.deleteDatabase(name)
         fresh(name).also { it.openHelper.writableDatabase; it.close(); opened.remove(it) }
-        raw(name).use { it.version = 5; it.execSQL("CREATE TABLE FutureOnly (id INTEGER PRIMARY KEY)") }
+        raw(name).use { it.version = DataFormat.ROOM_SCHEMA_VERSION + 1; it.execSQL("CREATE TABLE FutureOnly (id INTEGER PRIMARY KEY)") }
         val report = CompatibilityChecker(open(name)).check()
         assertTrue(report is CompatibilityReport.Incompatible)
         raw(name).use { db ->
-            assertEquals(5, db.version)
+            assertEquals(DataFormat.ROOM_SCHEMA_VERSION + 1, db.version)
             db.rawQuery("SELECT count(*) FROM sqlite_master WHERE name = 'FutureOnly'", null).use { it.moveToFirst(); assertEquals(1, it.getInt(0)) }
         }
     }

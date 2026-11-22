@@ -15,9 +15,9 @@ import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class) @Config(sdk = [35])
 class ScheduleMigrationTest {
-    @Test fun exportedV1ToV3PreservesAllConfiguration() = verify(1)
-    @Test fun exportedV2ToV3PreservesAllConfiguration() = verify(2)
-    @Test fun exportedV3ToV4PreservesConfigurationAndShifts() = verify(3)
+    @Test fun exportedV1ToCurrentPreservesAllConfiguration() = verify(1)
+    @Test fun exportedV2ToCurrentPreservesAllConfiguration() = verify(2)
+    @Test fun exportedV3ToCurrentPreservesConfigurationAndShifts() = verify(3)
     private fun verify(version: Int) = runTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val name = "local-schedule-migration-$version.db"
@@ -46,7 +46,7 @@ class ScheduleMigrationTest {
                 }
                 old.version = version
             }
-            val db = Room.databaseBuilder(context, TurnoDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+            val db = Room.databaseBuilder(context, TurnoDatabase::class.java, name).addMigrations(*ALL_MIGRATIONS).build()
             try {
                 assertEquals(Profile(displayName = "Perfil ficticio", alias = "ALFA", zoneId = "UTC"), db.configuration().observeProfile().first())
                 assertEquals(Contract(type = "FULL", agreedMinutes = 2250, unit = "WEEK", validFrom = "2026-01-01", validUntil = "2026-12-31"), db.configuration().contract())
@@ -57,7 +57,7 @@ class ScheduleMigrationTest {
                     assertEquals(listOf(ScheduledInterval(11,7,0,1080,0,0,1), ScheduledInterval(12,7,1,0,60,1,1)), saved.intervals.sortedBy { it.position })
                     assertTrue(saved.intervals.none { it.isExtra })
                 }
-                assertEquals(4, db.openHelper.readableDatabase.version)
+                assertEquals(com.turnocontrol.domain.DataFormat.ROOM_SCHEMA_VERSION, db.openHelper.readableDatabase.version)
             } finally { db.close() }
         } finally { context.deleteDatabase(name) }
     }

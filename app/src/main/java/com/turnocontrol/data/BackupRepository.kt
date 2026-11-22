@@ -122,6 +122,7 @@ class BackupRepository internal constructor(
                 dao.deleteIntervals(); dao.deleteDays(); dao.deletePayRules(); dao.deleteContracts(); dao.deleteProfiles()
                 dao.insertProfiles(wanted.profiles); dao.insertContracts(wanted.contracts); dao.insertPayRules(wanted.payRules)
                 dao.insertDays(wanted.days); dao.insertIntervals(wanted.intervals)
+                db.sync().onUserDataReplaced() // Same transaction: never a restored calendar with a stale outbox.
             }
         } catch (e: CancellationException) {
             throw e // The journal stays: the next start compares the database and decides.
