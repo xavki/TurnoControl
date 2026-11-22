@@ -89,7 +89,12 @@ internal fun memoryAwarePlan(width: Int, height: Int, encodedBytes: Long, availa
 private const val NO_MEMORY = "No hay memoria suficiente para procesar esta imagen de forma segura. Cierra otras aplicaciones o usa una foto con menos resolución."
 
 @Singleton
-class LocalImageOcr internal constructor(private val context: Context, private val memory: MemoryProbe) : ImageOcr {
+class LocalImageOcr internal constructor(
+    private val context: Context,
+    private val memory: MemoryProbe,
+    /** Only the recognition step crosses this boundary; decoding, memory budget and rotation stay in this class. */
+    private val engine: TextRecognitionEngine = MlKitTextRecognitionEngine,
+) : ImageOcr {
     @Inject constructor(@ApplicationContext context: Context) : this(context, object : MemoryProbe {
         private val manager = context.getSystemService(ActivityManager::class.java)
         override fun availableBytes() = ActivityManager.MemoryInfo().also { manager.getMemoryInfo(it) }.let { if (it.lowMemory) it.availMem / 2 else it.availMem }
@@ -173,18 +178,7 @@ class LocalImageOcr internal constructor(private val context: Context, private v
     }
 
     override suspend fun recognize(image: ImportedImage): OcrDocument = withContext(Dispatchers.IO) {
-        recognitionLock.withLock {
-            val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-            try {
-                // Wait for native processing before releasing the recognizer, even when the UI cancels.
-                val result = suspendCoroutine<Text> { continuation ->
-                    recognizer.process(InputImage.fromBitmap(image.bitmap, 0))
-                        .addOnSuccessListener { continuation.resume(it) }
-                        .addOnFailureListener { continuation.resumeWithException(it) }
-                }
-                result.toDocument(image.bitmap.width, image.bitmap.height)
-            } finally { recognizer.close() }
-        }
+        recognitionLock.withLock { engine.recognize(image.bitmap) }
     }
 
     companion object {
@@ -211,3 +205,29 @@ internal fun Text.toDocument(width: Int, height: Int) = OcrDocument(text, width,
                 })
         })
 })
+
+/**
+ * The smallest OCR boundary (phase 4B.5.1): an already decoded, size-checked and upright bitmap in, the recognized
+ * geometry out. Nothing else (file, account, calendar, persistence) crosses it. A future implementation may run the
+ * recognizer in an isolated process; it must keep this contract: one call at a time is guaranteed by the caller, the
+ * call waits for native work to finish before returning (also on cancellation), and failures are thrown, not hidden.
+ */
+interface TextRecognitionEngine {
+    suspend fun recognize(bitmap: Bitmap): OcrDocument
+}
+
+/** Current production engine: ML Kit in the app process, exactly as before the boundary existed. */
+object MlKitTextRecognitionEngine : TextRecognitionEngine {
+    override suspend fun recognize(bitmap: Bitmap): OcrDocument {
+        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        try {
+            // Wait for native processing before releasing the recognizer, even when the UI cancels.
+            val result = suspendCoroutine<Text> { continuation ->
+                recognizer.process(InputImage.fromBitmap(bitmap, 0))
+                    .addOnSuccessListener { continuation.resume(it) }
+                    .addOnFailureListener { continuation.resumeWithException(it) }
+            }
+            return result.toDocument(bitmap.width, bitmap.height)
+        } finally { recognizer.close() }
+    }
+}
