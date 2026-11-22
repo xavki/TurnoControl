@@ -651,6 +651,26 @@ Si una fila remota rompe alguna de estas reglas, no se aplica y se crea un confl
 
 ---
 
+### 9.5 Implementación (fase 5B, 2026-11-22; motor interno, sin interfaz)
+`LinkMergePlanner` (dominio) y `AccountLinker` (datos) implementan la vinculación con el requisito del propietario: los datos de invitado se **copian**, con aprobación explícita, a la base propia de la cuenta. **La base de invitado solo se lee**: nunca se modifica, vincula ni borra.
+
+- **Antes de combinar:** la base de la cuenta se pone al día con una sincronización normal. La combinación compara los datos de invitado con el estado de la cuenta, usando sus versiones conocidas y su cuarentena.
+- **Tipos de registro:**
+  - `IMPORT` y `KEEP_ACCOUNT` se aplican solos;
+  - `ALREADY_IDENTICAL` no cambia nada;
+  - `CONFLICT` y `DELETED_IN_ACCOUNT` exigen una decisión: conservar invitado, conservar cuenta o cancelar;
+  - `UNSUPPORTED` (en cuarentena) queda intacto.
+- **Riesgo alto:** sustituir datos de la cuenta exige una segunda confirmación. Se puede omitir un registro de invitado sin confirmar nada, porque sigue existiendo en la base de invitado.
+- **Validación:** el resultado combinado se valida con `SyncRules`. Un turno nocturno que choca con el día siguiente da `Invalid` y hay que omitirlo.
+- **Seguridad del proceso:**
+  - se verifica la propiedad (espacio, vínculo de la base y ningún conflicto abierto);
+  - el identificador de la vista previa debe coincidir con los datos actuales;
+  - antes de cambiar nada se escriben copias previas de ambos lados;
+  - todo se aplica en una sola transacción de Room bajo el bloqueo de operaciones, que impide cambiar de cuenta mientras tanto;
+  - las operaciones salientes se basan en las versiones de la cuenta.
+- **Recuperación:** un diario marcado con su espacio permite que, tras un corte, la vinculación se complete si la transacción llegó a confirmarse, o se descarte si no. Repetir la misma vista previa devuelve `AlreadyLinked`.
+- **Perfil provisional:** el perfil «Mi calendario» creado localmente en la base de la cuenta, que el servidor no conoce y no está pendiente, no cuenta como dato de la cuenta.
+
 ## 10. Comportamiento sin conexión
 - **Uso:** la app funciona completa sin conexión, con o sin cuenta.
 - **Estado visible en Ajustes → Cuenta, y como icono discreto en el Resumen:**
