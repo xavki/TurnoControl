@@ -72,6 +72,25 @@ class KeystoreSessionVaultTest {
         assertTrue(aliases().isEmpty())
     }
 
+    @Test fun eachAccountGetsItsOwnKey() {
+        vault.save(session(a, "token-a")); vault.save(session(b, "token-b"))
+        assertEquals(2, aliases().size)
+        assertEquals("token-a", (vault.load(a) as SessionLoad.Found).session.handle)
+        assertEquals("token-b", (vault.load(b) as SessionLoad.Found).session.handle)
+    }
+
+    @Test fun sessionFailuresNeverTouchTheCalendar() {
+        val db = dagger.hilt.android.EntryPointAccessors.fromApplication(context, com.turnocontrol.CalendarTestDatabase::class.java).database()
+        val before = kotlinx.coroutines.runBlocking { db.schedule().all() }
+        vault.save(session(a, "token-a"))
+        dir.listFiles()!!.single().let { file -> file.writeBytes(file.readBytes().also { it[it.size - 2] = (it[it.size - 2] + 1).toByte() }) }
+        assertTrue(vault.load(a) is SessionLoad.RequiresSignIn)
+        aliases().forEach { keystore().deleteEntry(it) }
+        assertTrue(vault.load(a) is SessionLoad.RequiresSignIn)
+        vault.clear(a)
+        assertEquals(before, kotlinx.coroutines.runBlocking { db.schedule().all() })
+    }
+
     @Test fun productionSessionsLiveOutsideBackups() {
         val production = SessionVaults.forContext(context)
         val field = EncryptedSessionVault::class.java.getDeclaredField("directory").apply { isAccessible = true }
