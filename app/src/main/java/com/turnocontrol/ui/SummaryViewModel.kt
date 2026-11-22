@@ -42,7 +42,7 @@ class SummaryViewModel internal constructor(days: Flow<List<StoredScheduleDay>>,
             try { combine(days, rates) { rows, rules -> rows.map { it.planned() } to rules }.collect { (planned, rules) -> mutable.update { it.copy(days = planned, rates = rules, loading = false) } } }
             catch (e: Exception) {
                 // Keep the last values; the calendar tab owns the retry UI for storage errors.
-                if (e !is IOException && e !is SQLiteException) throw e
+                if (e !is IOException && e !is SQLiteException && e !is com.turnocontrol.data.accounts.StorageSessionClosedException) throw e
                 mutable.update { it.copy(loading = false) }
             }
         }

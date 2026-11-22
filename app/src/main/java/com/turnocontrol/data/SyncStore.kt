@@ -155,8 +155,7 @@ internal fun PendingChange.row() = SyncOutbox(operationId = operationId, entity 
  * A crash between steps is safe: in-flight operations are resent with the same ids (idempotent on the server) and
  * pages are pulled again from the committed cursor.
  */
-@Singleton
-class SyncStore @Inject constructor(private val db: TurnoDatabase, private val gate: com.turnocontrol.data.accounts.OperationGate) {
+class SyncStore(private val db: TurnoDatabase, private val gate: com.turnocontrol.data.accounts.OperationGate) {
     constructor(db: TurnoDatabase) : this(db, com.turnocontrol.data.accounts.OperationGate())
     companion object {
         /** Reason of a valid record this schema cannot store yet; it is restored as-is once the schema can. */

@@ -11,8 +11,7 @@ import javax.inject.Singleton
  * never writes when it rejects the data. Room fails on first access, not at build(), for a newer schema version
  * or a schema hash it does not recognise; both are reported instead of crashing.
  */
-@Singleton
-class CompatibilityChecker @Inject constructor(private val db: TurnoDatabase) {
+class CompatibilityChecker(private val db: TurnoDatabase) {
     fun check(): CompatibilityReport {
         val sql = try { db.openHelper.writableDatabase } catch (e: IllegalStateException) {
             val message = e.message.orEmpty()

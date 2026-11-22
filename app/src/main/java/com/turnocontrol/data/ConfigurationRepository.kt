@@ -16,9 +16,8 @@ import java.math.BigDecimal
 import kotlinx.coroutines.flow.map
 
 private val Context.preferences by preferencesDataStore("preferences")
-@Singleton
 class ConfigurationRepository internal constructor(private val db: TurnoDatabase, private val preferences: DataStore<Preferences>, private val gate: OperationGate = OperationGate()) {
-    @Inject constructor(db: TurnoDatabase, @ApplicationContext context: Context, gate: OperationGate) : this(db, context.preferences, gate)
+    constructor(db: TurnoDatabase, context: Context, gate: OperationGate) : this(db, context.preferences, gate)
     /** For callers outside Hilt (instrumented tests): its own gate, as before account storage existed. */
     constructor(db: TurnoDatabase, context: Context) : this(db, context.preferences, OperationGate())
     val profile = db.configuration().observeProfile()

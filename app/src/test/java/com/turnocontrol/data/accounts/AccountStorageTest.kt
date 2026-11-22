@@ -112,9 +112,11 @@ class AccountStorageTest {
         val staleSync = SyncStore(sessionA.database)
         storage.signOut()
         assertFalse(sessionA.open)
-        assertThrows(IllegalStateException::class.java) { runBlocking { staleRepo.snapshot() } }
-        assertThrows(IllegalStateException::class.java) { runBlocking { staleSync.load() } }
-        assertThrows(IllegalStateException::class.java) { runBlocking { sessionA.database.sync().state() } }
+        assertStale { staleRepo.snapshot() }
+        assertStale { staleSync.load() }
+        assertStale { sessionA.database.sync().state() }
+        // Direct (non-coroutine) reopen of the closed database is stopped by the SessionGuard itself.
+        assertThrows(StorageSessionClosedException::class.java) { sessionA.database.openHelper.readableDatabase }
         assertTrue(storage.current!!.open) // The guest session is unaffected.
     }
 
@@ -233,4 +235,12 @@ class AccountStorageTest {
         val snapshot = BackupRepository(guest.database, { false }, {}, layout.locate(StorageNamespace.Guest).recoveryDirectory, AppVersion("t", 1)).snapshot()
         assertEquals(listOf("2026-12-01"), snapshot.days.map { it.date })
     }
+}
+
+/** A stale handle must fail without returning data: Room cancels suspend calls on a closed database (its coroutine
+ *  scope is closed), and a direct reopen hits the SessionGuard. Both are accepted; any result is a failure. */
+internal fun assertStale(block: suspend () -> Any?) {
+    val error = runCatching { kotlinx.coroutines.runBlocking { block() } }.exceptionOrNull()
+    org.junit.Assert.assertTrue("Se esperaba un fallo y se obtuvo: $error",
+        error is StorageSessionClosedException || error is kotlinx.coroutines.CancellationException)
 }

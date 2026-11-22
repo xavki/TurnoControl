@@ -129,8 +129,14 @@ private fun atomicWrite(directory: File, file: File, text: String) {
 class SessionGuard {
     @Volatile var closed = false
         internal set
-    fun checkOpen() = check(!closed) { "La sesión de almacenamiento se cerró al cambiar de cuenta; esta referencia ya no es válida." }
+    fun checkOpen() { if (closed) throw StorageSessionClosedException() }
 }
+
+/**
+ * A stale reference touched a closed storage session; nothing was read or written. Unchecked, because Room turns
+ * checked exceptions from its open callback into coroutine cancellation; screens treat it as a storage error.
+ */
+class StorageSessionClosedException : IllegalStateException("La sesión de almacenamiento se cerró al cambiar de cuenta; esta referencia ya no es válida.")
 
 /** Builds a namespace database with the shared migrations and its [SessionGuard]. */
 object StorageDatabases {
@@ -178,7 +184,34 @@ class AccountStorageCoordinator(
     var current: StorageSession? = null
         private set
 
-    /** Process start: an interrupted switch never committed, so the committed namespace is reopened as it was. */
+    /**
+     * Process start without I/O on the database (safe on the main thread): an interrupted switch never committed, so
+     * the committed namespace is opened. Its binding is checked asynchronously by [verifyCurrent] in the startup gate.
+     */
+    fun openCommitted(): StorageSession {
+        check(current == null) { "El almacenamiento ya está abierto." }
+        if (journal.pending()) journal.clear()
+        val location = layout.locate(active.read())
+        val guard = SessionGuard()
+        return StorageSession(location, openDatabase(location, guard), ++generation, guard).also { current = it }
+    }
+
+    /** Startup gate check of the committed session's binding; a reason means the data must not be shown. */
+    suspend fun verifyCurrent(): String? {
+        val session = checkNotNull(current) { "El almacenamiento no está abierto." }
+        return runCatching {
+            val state = session.database.withTransaction { session.database.sync().state() }
+            when (session.location.namespace) {
+                StorageNamespace.Guest -> state?.accountId?.let { "Los datos locales están vinculados a una cuenta y no se muestran como datos sin cuenta." }
+                is StorageNamespace.Account -> state?.accountId?.let { id ->
+                    if (AccountId.parse(id)?.let { StorageNamespace.forAccount(it) } == session.location.namespace) null
+                    else "Los datos de esta cuenta no corresponden a su espacio de almacenamiento."
+                }
+            }
+        }.getOrElse { "No se pudo comprobar a quién pertenecen los datos locales. No se ha cambiado nada." }
+    }
+
+    /** Process start with verification (tests and future callers that may wait). */
     suspend fun start(): StorageSession {
         check(current == null) { "El almacenamiento ya está abierto." }
         if (journal.pending()) journal.clear()

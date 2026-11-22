@@ -8,6 +8,7 @@ import com.turnocontrol.domain.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import java.io.IOException
@@ -66,7 +67,9 @@ class ConfigurationViewModel @Inject constructor(private val repository: Configu
                 repository.save(draft)
                 mutable.update { it.copy(saving = false, configured = true, storedName = draft.name.trim(), storedAlias = draft.alias.trim(), message = "Configuración guardada en este dispositivo.") }
             } catch (e: Exception) {
-                if (e is CancellationException) throw e
+                // A cancellation while this coroutine is still active comes from a closed storage session (Room cancels
+                // calls on a database closed by an account switch): report it as a failed save instead of hanging.
+                if (e is CancellationException && !isActive) throw e
                 // Validation and pending-conflict errors carry a specific Spanish message; storage errors keep the generic one.
                 val message = if (e is ConfigurationValidationException || e is SyncConflictPendingException) e.message!! else "No se pudo guardar. Reintenta."
                 mutable.update { it.copy(saving = false, message = message) }

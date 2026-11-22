@@ -45,7 +45,6 @@ sealed interface RecoveryOutcome {
  * If the process dies between steps, [recoverInterrupted] runs at the next start and either completes step 4
  * (database already equals the backup), discards the journal (database untouched) or asks the user.
  */
-@Singleton
 class BackupRepository internal constructor(
     private val db: TurnoDatabase,
     private val readTheme: suspend () -> Boolean,
@@ -60,12 +59,13 @@ class BackupRepository internal constructor(
 ) {
     interface StreamOpener { fun input(uri: Uri): InputStream?; fun output(uri: Uri): OutputStream? }
 
-    @Inject constructor(db: TurnoDatabase, configuration: ConfigurationRepository, @ApplicationContext context: Context, gate: OperationGate) : this(
-        db, { configuration.darkTheme.first() }, configuration::setDarkTheme, StorageLayout(context.filesDir).locate(StorageNamespace.Guest).recoveryDirectory, appVersion(context),
+    /** Production: built per storage session, recovering only into that session's own directory and namespace. */
+    constructor(db: TurnoDatabase, configuration: ConfigurationRepository, context: Context, gate: OperationGate, location: com.turnocontrol.data.accounts.StorageLocation) : this(
+        db, { configuration.darkTheme.first() }, configuration::setDarkTheme, location.recoveryDirectory, appVersion(context),
         object : StreamOpener {
             override fun input(uri: Uri) = context.contentResolver.openInputStream(uri)
             override fun output(uri: Uri) = context.contentResolver.openOutputStream(uri, "wt")
-        }, namespace = StorageNamespace.Guest, gate = gate)
+        }, namespace = location.namespace, gate = gate)
 
     private val lock = Mutex()
     internal val journal get() = File(directory, "restore.journal")

@@ -20,8 +20,8 @@ fun StoredScheduleDay.planned() = PlannedDay(LocalDate.parse(day.date),
 
 class ScheduleChangedException : IllegalStateException("El calendario cambió desde que lo abriste. Vuelve a cargar y revisar; no se ha guardado nada.")
 
-@Singleton
-class ScheduleRepository @Inject constructor(private val db: TurnoDatabase, private val gate: OperationGate) {
+/** One instance per storage session (see StorageScope). */
+class ScheduleRepository(private val db: TurnoDatabase, private val gate: OperationGate) {
     constructor(db: TurnoDatabase) : this(db, OperationGate())
     val days = db.schedule().observe()
     suspend fun snapshot() = db.schedule().all().canonical()

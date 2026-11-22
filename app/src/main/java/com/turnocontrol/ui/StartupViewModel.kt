@@ -31,8 +31,9 @@ class StartupViewModel internal constructor(
     private val keepCurrent: suspend () -> Unit = {},
     private val restoreSafety: suspend () -> Unit = {},
 ) : ViewModel() {
-    @Inject constructor(checker: CompatibilityChecker, backup: BackupRepository) : this(
-        { withContext(Dispatchers.IO) { checker.check() } }, { backup.recoverInterrupted() }, { backup.keepCurrentData() }, { backup.restoreSafetyCopy() })
+    @Inject constructor(checker: CompatibilityChecker, backup: BackupRepository, storage: com.turnocontrol.data.accounts.StorageSessionHolder) : this(
+        // The active data must belong to the active namespace (guest data never linked to an account) before anything is read.
+        { withContext(Dispatchers.IO) { storage.verifyActive()?.let { CompatibilityReport.Incompatible(listOf(it)) } ?: checker.check() } }, { backup.recoverInterrupted() }, { backup.keepCurrentData() }, { backup.restoreSafetyCopy() })
     private val mutable = MutableStateFlow<StartupState>(StartupState.Checking)
     val state = mutable.asStateFlow()
     private val replaced = MutableStateFlow(false)

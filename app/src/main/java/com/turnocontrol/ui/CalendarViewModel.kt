@@ -16,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import android.database.sqlite.SQLiteException
+import com.turnocontrol.data.accounts.StorageSessionClosedException
 import java.io.IOException
 
 data class IntervalDraft(val start: LocalTime? = null, val end: LocalTime? = null, val startOffset: Int = 0, val endOffset: Int = 0, val extra: Boolean = false)
@@ -71,7 +72,7 @@ class CalendarViewModel internal constructor(
         observationJob = viewModelScope.launch {
             try { days.collect { rows -> mutable.update { it.copy(days = rows, loading = false, observationError = null) } } }
             catch (e: Exception) {
-                if (e !is IOException && e !is SQLiteException) throw e
+                if (e !is IOException && e !is SQLiteException && e !is StorageSessionClosedException) throw e
                 mutable.update { it.copy(loading = false, observationError = "No se pudo observar el calendario. Se conserva la última vista disponible.") }
             }
         }
@@ -201,7 +202,7 @@ class CalendarViewModel internal constructor(
                     editorReady = false, importReady = false, needsReconciliation = true, emptyChoice = false,
                     message = if (e is CancellationException) null else "No se pudo determinar si el cambio se guardó. Lee el calendario y compara los datos antes de decidir otra operación.") }
                 // Do not hide cancellation or programming errors behind a storage message.
-                if (e !is IOException && e !is SQLiteException) throw e
+                if (e !is IOException && e !is SQLiteException && e !is StorageSessionClosedException) throw e
             }
             return false
         }
@@ -250,7 +251,7 @@ class CalendarViewModel internal constructor(
         }
     }
     private fun reportRead(e: Exception) {
-        if (e !is IOException && e !is SQLiteException) throw e
+        if (e !is IOException && e !is SQLiteException && e !is StorageSessionClosedException) throw e
         mutable.update { it.copy(needsReconciliation = true, message = when (it.saveOutcome) {
             SaveOutcome.CONFIRMED -> "El guardado se completó, pero no se pudo actualizar la vista. Puedes volver a leer sin guardar."
             SaveOutcome.UNKNOWN -> "El resultado del guardado sigue siendo incierto y no se pudo actualizar la vista. No se ha repetido la escritura."
