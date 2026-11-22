@@ -78,6 +78,12 @@ interface AuthProvider {
     fun validity(session: AuthSession, now: Instant): SessionValidity
 }
 
+/** Where sessions are kept between launches (encrypted; see data/auth). Never consulted for authorization. */
+interface SessionPersistence {
+    fun save(session: AuthSession)
+    fun clear(account: AccountId)
+}
+
 /** Explicit states: no Boolean combination can describe an impossible one. */
 sealed interface AuthState {
     data object Guest : AuthState
@@ -97,7 +103,7 @@ class AuthorizedSession internal constructor(val session: AuthSession) { val acc
  * Authentication state machine. All transitions are serialized; every one is explicit and tested. Storage switching
  * is coordinated by the caller (see data/accounts), never here.
  */
-class AuthManager(private val provider: AuthProvider, private val clock: () -> Instant = Instant::now) {
+class AuthManager(private val provider: AuthProvider, private val persistence: SessionPersistence? = null, private val clock: () -> Instant = Instant::now) {
     private val lock = Mutex()
     var state: AuthState = AuthState.Guest
         private set
@@ -124,7 +130,7 @@ class AuthManager(private val provider: AuthProvider, private val clock: () -> I
                 if (expired != null && expired.identity.accountId != result.session.identity.accountId) {
                     provider.signOut(result.session)
                     AuthState.Failed(AuthError.InvalidState, current)
-                } else AuthState.Authenticated(result.session)
+                } else AuthState.Authenticated(result.session).also { persistence?.save(result.session) }
             }
         }
         state
@@ -133,7 +139,8 @@ class AuthManager(private val provider: AuthProvider, private val clock: () -> I
     /** Signing out never needs the network and is idempotent; afterwards the app is a guest. */
     suspend fun signOut(): AuthState = lock.withLock {
         when (val current = settled) {
-            is AuthState.Authenticated -> runCatching { provider.signOut(current.session) }
+            is AuthState.Authenticated -> { runCatching { provider.signOut(current.session) }; persistence?.clear(current.session.identity.accountId) }
+            is AuthState.SessionExpired -> persistence?.clear(current.identity.accountId)
             else -> Unit
         }
         state = AuthState.Guest
@@ -148,8 +155,12 @@ class AuthManager(private val provider: AuthProvider, private val clock: () -> I
         state = when (val result = attempt(request)) {
             is AuthResult.Failure -> AuthState.Failed(result.error, current)
             is AuthResult.Success -> {
-                if (result.session.identity.accountId == current.session.identity.accountId) AuthState.Authenticated(result.session)
-                else { runCatching { provider.signOut(current.session) }; AuthState.Authenticated(result.session) }
+                persistence?.save(result.session)
+                if (result.session.identity.accountId != current.session.identity.accountId) {
+                    runCatching { provider.signOut(current.session) }
+                    persistence?.clear(current.session.identity.accountId)
+                }
+                AuthState.Authenticated(result.session)
             }
         }
         state
@@ -162,6 +173,21 @@ class AuthManager(private val provider: AuthProvider, private val clock: () -> I
             SessionValidity.VALID -> current
             SessionValidity.EXPIRED -> AuthState.SessionExpired(current.session.identity, ExpiryReason.EXPIRED)
             SessionValidity.REVOKED -> AuthState.SessionExpired(current.session.identity, ExpiryReason.REVOKED)
+                .also { persistence?.clear(current.session.identity.accountId) } // A revoked session is never kept.
+        }
+        state
+    }
+
+    /**
+     * App start with a session read back from storage. Only from guest. An expired session waits for renewal of the
+     * same account; a revoked one is deleted. Neither authorizes anything.
+     */
+    suspend fun restore(session: AuthSession): AuthState = lock.withLock {
+        if (settled != AuthState.Guest) return@withLock state
+        state = when (provider.validity(session, clock())) {
+            SessionValidity.VALID -> AuthState.Authenticated(session)
+            SessionValidity.EXPIRED -> AuthState.SessionExpired(session.identity, ExpiryReason.EXPIRED)
+            SessionValidity.REVOKED -> AuthState.SessionExpired(session.identity, ExpiryReason.REVOKED).also { persistence?.clear(session.identity.accountId) }
         }
         state
     }
