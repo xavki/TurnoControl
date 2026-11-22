@@ -58,6 +58,20 @@ class CalendarViewModelTest {
         val reopened = CalendarViewModel(repo).also { store.put("reopened", it) }
         assertEquals(rows, reopened.state.first { !it.loading }.days)
     }
+    @Test fun abandonedImportWritesNothingAndANewImportIsClassifiedAgainstCurrentData() = runTest(dispatcher) {
+        model.prepareImport(listOf(planned("08:00-12:00")))
+        importReady()
+        // Leaving the confirmation without saving: the next import replaces the review and sees data saved meanwhile.
+        repo.save(repo.snapshot(), listOf(planned("09:00-13:00")))
+        model.prepareImport(listOf(planned("08:00-12:00"), planned("10:00-14:00", date.plusDays(1))))
+        importReady()
+        assertEquals(listOf(ImportStatus.CONFLICT, ImportStatus.NEW), model.state.value.imports.map { it.status })
+        assertEquals(model.state.value.importReview!!.proposals, model.state.value.imports) // One source of truth.
+        assertEquals(listOf("09:00–13:00"), repo.snapshot().map { it.planned().rangeText() })
+        model.resetAfterRestore()
+        assertNull(model.state.value.importReview)
+        assertTrue(model.state.value.imports.isEmpty())
+    }
     @Test fun reimportingTheSameScheduleIsDetectedAndNeverDuplicated() = runTest(dispatcher) {
         repo.save(repo.snapshot(), listOf(planned()))
         val before = repo.snapshot()

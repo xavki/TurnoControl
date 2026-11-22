@@ -18,20 +18,6 @@ import kotlinx.coroutines.launch
 import android.database.sqlite.SQLiteException
 import java.io.IOException
 
-/** NEW is added, UNCHANGED is already stored identically (never duplicated), CONFLICT needs an explicit decision. */
-enum class ImportStatus { NEW, UNCHANGED, CONFLICT }
-data class ImportProposal(val planned: PlannedDay, val existing: PlannedDay?, val replace: Boolean? = null) {
-    val status: ImportStatus get() = when { existing == null -> ImportStatus.NEW; existing == planned -> ImportStatus.UNCHANGED; else -> ImportStatus.CONFLICT }
-    val writes: Boolean get() = status == ImportStatus.NEW || (status == ImportStatus.CONFLICT && replace == true)
-}
-data class ImportSummary(val days: Int, val shifts: Int, val added: Int, val replaced: Int, val unchanged: Int, val kept: Int, val unresolved: Int)
-
-/** Plain-language difference between a stored day and an imported one. */
-fun importDifference(existing: PlannedDay, imported: PlannedDay): String = buildString {
-    append(if (existing.kind != imported.kind) "Cambia de ${existing.kind.label.lowercase()} a ${imported.kind.label.lowercase()}."
-        else "Cambia el horario: ${existing.rangeText()} → ${imported.rangeText()}.")
-    if (existing.extraMinutes() > 0) append(" Sustituir eliminará las marcas de hora extra del día guardado.")
-}
 data class IntervalDraft(val start: LocalTime? = null, val end: LocalTime? = null, val startOffset: Int = 0, val endOffset: Int = 0, val extra: Boolean = false)
 data class ShiftEditor(val split: Boolean = false, val slots: List<IntervalDraft> = listOf(IntervalDraft()), val editingIndex: Int? = null)
 enum class SaveOutcome { NONE, REJECTED, CONFIRMED, UNKNOWN }
@@ -54,14 +40,15 @@ data class CalendarState(
     val selected: LocalDate? = null, val focused: LocalDate = LocalDate.now(), val week: Boolean = false,
     val editor: ShiftEditor? = null, val emptyChoice: Boolean = false,
     val busy: Boolean = false, val editorReady: Boolean = false, val message: String? = null,
-    val imports: List<ImportProposal> = emptyList(), val importReady: Boolean = false, val importSaved: Boolean = false,
+    /** The OCR review being confirmed (pure domain state); null when no import is open. */
+    val importReview: OcrImportReview? = null, val importReady: Boolean = false, val importSaved: Boolean = false,
     val observationError: String? = null, val saveOutcome: SaveOutcome = SaveOutcome.NONE, val needsReconciliation: Boolean = false,
     val reconciliation: WriteReconciliation? = null, val editorHidden: Boolean = false,
-)
+) {
+    val imports: List<ImportProposal> get() = importReview?.proposals.orEmpty()
+}
 
 data class RangePreview(val days: Int, val replaced: Int)
-
-fun PlannedDay.rangeText() = when (kind) { DayKind.FREE -> "LIBRE"; DayKind.VACATION -> "VACACIONES"; DayKind.SICK_LEAVE -> "BAJA MÉDICA"; else -> intervals.joinToString(" / ") { "${it.start}${if (it.startDayOffset == 1) " (+1 día)" else ""}–${it.end}${if (it.endDayOffset == 1) " (+1 día)" else ""}${if (it.isExtra) " · Extra declarada" else ""}" } }
 
 @HiltViewModel
 class CalendarViewModel internal constructor(
@@ -92,7 +79,7 @@ class CalendarViewModel internal constructor(
     /** After a restore every open draft, snapshot and import proposal refers to replaced data: drop them. */
     fun resetAfterRestore() {
         expected = emptyList(); importExpected = emptyList()
-        mutable.update { it.copy(selected = null, editor = null, editorReady = false, editorHidden = false, emptyChoice = false, imports = emptyList(),
+        mutable.update { it.copy(selected = null, editor = null, editorReady = false, editorHidden = false, emptyChoice = false, importReview = null,
             importReady = false, importSaved = false, reconciliation = null, needsReconciliation = false, saveOutcome = SaveOutcome.NONE, message = null) }
     }
     /** A restore must not race an in-flight write or an unresolved uncertain save. */
@@ -270,54 +257,43 @@ class CalendarViewModel internal constructor(
             else -> "No se pudo leer el calendario. Se conservan los últimos datos y borradores disponibles."
         }) }
     }
+    // OCR import. Classification, decisions and validation live in [OcrImportReview] (domain); this ViewModel only
+    // reads the snapshot and writes through the same boundary as manual edits, so there is a single busy/uncertain
+    // write state for the whole calendar.
+
     /** Reads a fresh snapshot and classifies already validated, explicitly reviewed days. Nothing is written here. */
     fun prepareImport(days: List<PlannedDay>) {
         if (state.value.busy || state.value.reconciliation?.reviewed == false) return
-        mutable.update { it.copy(busy = true, reconciliation = null, importReady = false, importSaved = false, imports = emptyList(), message = null) }
+        mutable.update { it.copy(busy = true, reconciliation = null, importReady = false, importSaved = false, importReview = null, message = null) }
         viewModelScope.launch {
             try {
                 importExpected = readSnapshot()
-                mutable.update { it.copy(importReady = true, imports = days.map { day ->
-                    ImportProposal(day, importExpected.firstOrNull { row -> row.day.date == day.date.toString() }?.planned())
-                }) }
+                val review = OcrImportReview.classify(days, importExpected.map { it.planned() })
+                mutable.update { it.copy(importReady = true, importReview = review) }
             } catch (e: Exception) { reportRead(e) }
             finally { mutable.update { it.copy(busy = false) } }
         }
     }
     fun resolveImport(index: Int, replace: Boolean) {
         if (state.value.busy || state.value.reconciliation != null) return
-        mutable.update { s -> s.copy(message = null, imports = s.imports.mapIndexed { i, p -> if (i == index && p.status == ImportStatus.CONFLICT) p.copy(replace = replace) else p }) }
+        mutable.update { s -> s.copy(message = null, importReview = s.importReview?.resolve(index, replace)) }
     }
-    fun importSummary(): ImportSummary = state.value.imports.let { all ->
-        val writes = all.filter { it.writes }
-        ImportSummary(writes.size, writes.sumOf { it.planned.intervals.size }, writes.count { it.status == ImportStatus.NEW },
-            writes.count { it.status == ImportStatus.CONFLICT }, all.count { it.status == ImportStatus.UNCHANGED },
-            all.count { it.status == ImportStatus.CONFLICT && it.replace == false }, all.count { it.status == ImportStatus.CONFLICT && it.replace == null })
-    }
+    fun importSummary(): ImportSummary = (state.value.importReview ?: OcrImportReview(emptyList(), emptyList())).summary()
     /** Why the import cannot be saved yet, or null. Checked again inside the repository transaction. */
-    fun importBlocker(): String? {
-        val input = state.value
-        val summary = importSummary()
-        if (summary.unresolved > 0) return "Decide qué hacer con ${summary.unresolved} día(s) que ya tienen datos distintos: sustituir o conservar."
-        val writes = input.imports.filter { it.writes }.map { it.planned }
-        if (writes.isEmpty()) return "No hay cambios que guardar: los días ya están en el calendario con los mismos datos o se conservan."
-        val stored = importExpected.map { it.planned() }.filter { day -> writes.none { it.date == day.date } }
-        PlannedScheduleValidator.validate(stored + writes) ?: return null
-        val clashes = writes.filter { day -> PlannedScheduleValidator.validate(stored.filter { kotlin.math.abs(it.date.toEpochDay() - day.date.toEpochDay()) <= 1 } + day) != null }
-        return "Hay turnos solapados con días guardados contiguos (turno nocturno): ${clashes.joinToString { it.date.toString() }.ifBlank { "revisa los días importados" }}."
-    }
+    fun importBlocker(): String? = (state.value.importReview ?: OcrImportReview(emptyList(), emptyList())).blocker()
     fun saveImport() {
         val input = state.value
         if (input.busy || !input.importReady || input.reconciliation != null) return
-        importBlocker()?.let { blocker -> mutable.update { it.copy(saveOutcome = SaveOutcome.REJECTED, message = blocker) }; return }
-        val proposed = input.imports.filter { it.writes }.map { it.planned }
-        val summary = importSummary()
+        val review = input.importReview ?: return
+        review.blocker()?.let { blocker -> mutable.update { it.copy(saveOutcome = SaveOutcome.REJECTED, message = blocker) }; return }
+        val proposed = review.writes
+        val summary = review.summary()
         mutable.update { it.copy(busy = true, message = null) }
         viewModelScope.launch {
             try {
                 if (!write(importExpected, WriteReconciliation(proposed, emptySet(), fromImport = true))) return@launch
                 val first = proposed.minOf { it.date }
-                mutable.update { it.copy(importSaved = true, importReady = false, imports = emptyList(), month = YearMonth.from(first), focused = first,
+                mutable.update { it.copy(importSaved = true, importReady = false, importReview = null, month = YearMonth.from(first), focused = first,
                     week = false, selected = null, editor = null, message = "Guardados ${summary.days} día(s) con ${summary.shifts} turno(s) en el calendario.") }
             } finally { mutable.update { it.copy(busy = false) } }
         }
