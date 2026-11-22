@@ -24,14 +24,15 @@ class SyncCodecsTest {
         assertEquals("OCR_REVIEWED", decoded.origin)
     }
 
-    @Test fun onlySickLeaveIsLocalOnlyAndUnknownIsNeverStored() {
+    @Test fun everyStoredStateIncludingSickLeaveIsSharedAndUnknownIsNeverStored() {
         SyncCodecs.shareableDayKinds.forEach { kind ->
             val intervals = if (kind == DayKind.WORK) listOf(ProvisionalInterval(LocalTime.of(8, 0), LocalTime.of(9, 0), 0, 0)) else emptyList()
-            assertTrue(SyncCodecs.encodeDay(DayRecord(PlannedDay(date, kind, intervals))) is LocalRecord.Shared)
+            val encoded = SyncCodecs.encodeDay(DayRecord(PlannedDay(date, kind, intervals)))
+            assertEquals(kind, SyncCodecs.decodeDay(key, encoded.payload).day.kind)
         }
-        val sick = SyncCodecs.encodeDay(DayRecord(PlannedDay(date, DayKind.SICK_LEAVE, emptyList())))
-        assertTrue(sick is LocalRecord.LocalOnly)
-        assertEquals(DayKind.SICK_LEAVE, SyncCodecs.localDay(key, sick).day.kind)
+        assertEquals(DataFormat.persistedDayKinds, SyncCodecs.shareableDayKinds)
+        assertEquals("1|2026-12-31|SICK_LEAVE|MANUAL|", SyncCodecs.encodeDay(DayRecord(PlannedDay(date, DayKind.SICK_LEAVE, emptyList()))).payload.text)
+        assertThrows(IllegalArgumentException::class.java) { SyncCodecs.encodeDay(DayRecord(PlannedDay(date, DayKind.SICK_LEAVE, listOf(ProvisionalInterval(LocalTime.of(8, 0), LocalTime.of(9, 0), 0, 0))))) }
         assertThrows(IllegalArgumentException::class.java) { SyncCodecs.encodeDay(DayRecord(PlannedDay(date, DayKind.UNKNOWN, emptyList()))) }
     }
 

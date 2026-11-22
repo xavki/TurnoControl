@@ -27,9 +27,10 @@ data class PayslipRecord(val period: YearMonth, val gross: BigDecimal?, val net:
  */
 object SyncCodecs {
     private val origins = setOf("MANUAL", "OCR_REVIEWED")
-    /** Kinds that may leave the device. SICK_LEAVE is local only (owner decision D9); UNKNOWN is never stored. */
-    val shareableDayKinds = setOf(DayKind.WORK, DayKind.FREE, DayKind.VACATION)
-    private const val LOCAL_ONLY_REASON = "Baja médica: se guarda solo en este dispositivo y no se sincroniza."
+    /** Every stored day state is synchronized (revised D9 includes SICK_LEAVE); UNKNOWN is never stored. */
+    val shareableDayKinds = setOf(DayKind.WORK, DayKind.FREE, DayKind.VACATION, DayKind.SICK_LEAVE)
+    /** Sick leave is only ever marked by hand, so its payload carries nothing beyond the date and the state. */
+    private const val SICK_LEAVE_ORIGIN = "MANUAL"
     private val intervalPattern = Regex("""(\d{2}):(\d{2})\+([01])-(\d{2}):(\d{2})\+([01]):([NE])""")
 
     fun dayKey(date: LocalDate) = RecordKey(SyncEntity.SCHEDULED_DAY, date.toString())
@@ -38,26 +39,27 @@ object SyncCodecs {
 
     // Calendar days. Format: 1|date|kind|origin|HH:MM+o-HH:MM+o:E,... (E = declared extra, N = regular)
 
-    /** Sick leave becomes [LocalRecord.LocalOnly]; its kind never appears in a [SyncPayload]. */
-    fun encodeDay(record: DayRecord): LocalRecord {
+    /**
+     * Allowlisted serialization: only date, state, intervals and origin are written; nothing else of the domain
+     * object can reach a payload. A sick-leave day is written as date + SICK_LEAVE (no intervals, fixed origin).
+     */
+    fun encodeDay(record: DayRecord): LocalRecord.Shared {
         val day = record.day
-        require(day.kind != DayKind.UNKNOWN) { "Un día sin configurar no se guarda." }
+        require(day.kind in shareableDayKinds) { "Un día sin configurar no se guarda." }
         require(record.origin in origins) { "Origen desconocido «${record.origin}»." }
+        require(day.kind != DayKind.SICK_LEAVE || record.origin == SICK_LEAVE_ORIGIN) { "Una baja médica solo se marca a mano." }
         PlannedScheduleValidator.validate(listOf(day))?.let { throw IllegalArgumentException(it) }
-        val text = dayText(record)
-        return if (day.kind in shareableDayKinds) LocalRecord.Shared(SyncPayload(SyncEntity.SCHEDULED_DAY, text))
-            else LocalRecord.LocalOnly(SyncEntity.SCHEDULED_DAY, text, LOCAL_ONLY_REASON)
+        return LocalRecord.Shared(SyncPayload(SyncEntity.SCHEDULED_DAY, dayText(record)))
     }
 
-    /** Decodes shared content; a shared payload claiming a non-shareable kind is refused, not reinterpreted. */
+    /** Strict decoding: unknown states, extra fields or extra data on a sick-leave day are refused, never reinterpreted. */
     fun decodeDay(key: RecordKey, payload: SyncPayload): DayRecord = parseDay(key, payload.text).also {
-        if (it.day.kind !in shareableDayKinds) throw SyncFormatException("Tipo de día no admitido en datos sincronizados: ${it.day.kind}.")
+        if (it.day.kind !in shareableDayKinds) throw SyncFormatException("Tipo de día no admitido en datos sincronizados.")
+        if (it.day.kind == DayKind.SICK_LEAVE && it.origin != SICK_LEAVE_ORIGIN) throw SyncFormatException("Una baja médica no admite datos adicionales.")
     }
 
-    /** Any local day, shared or local only (validation needs both). */
     fun localDay(key: RecordKey, record: LocalRecord): DayRecord = when (record) {
         is LocalRecord.Shared -> decodeDay(key, record.payload)
-        is LocalRecord.LocalOnly -> parseDay(key, record.content)
     }
 
     private fun dayText(record: DayRecord) = listOf("1", record.day.date.toString(), record.day.kind.name, record.origin,

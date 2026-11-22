@@ -38,9 +38,10 @@ class SyncEngineTest {
         devices.forEach { assertTrue("${it.replica.deviceId}: cola pendiente", it.replica.outbox.isEmpty()); assertTrue("${it.replica.deviceId}: conflictos", it.replica.conflicts.isEmpty()) }
         devices.map { d -> d.replica.records.filterValues { it is LocalRecord.Shared } }.zipWithNext().forEach { (a, b) -> assertEquals(a, b) }
     }
-    private fun assertNoSickLeaveLeft(vararg accounts: String) {
-        assertTrue(server.received.none { it.payload?.text?.contains("SICK_LEAVE") == true })
-        accounts.forEach { a -> assertTrue(server.records(a).values.none { it.payload?.text?.contains("SICK_LEAVE") == true }) }
+    /** A tombstone only ever represents an actual deletion: none must appear in these scenarios. */
+    private fun assertNoTombstones(vararg accounts: String) {
+        assertTrue(server.received.none { it.op == ChangeOp.DELETE })
+        accounts.forEach { a -> assertTrue(server.records(a).values.none { it.deleted }) }
     }
 
     // Basic synchronization
@@ -393,58 +394,173 @@ class SyncEngineTest {
         }
     }
 
-    @Test fun t25_sickLeaveNeverEntersTheQueueOrThePayloads() {
-        val a = Device("ana", "A")
-        val sick = kind("2026-03-02", DayKind.SICK_LEAVE)
-        assertTrue(sick is LocalRecord.LocalOnly)
-        assertEquals(EditKind.CREATED, a.put(key("2026-03-02"), sick))
-        assertTrue(a.replica.outbox.isEmpty())
-        assertEquals(SyncStatus.COMPLETED, a.sync().status)
-        assertTrue(server.records("ana").isEmpty())
-        assertEquals(DayKind.SICK_LEAVE, a.day("2026-03-02")!!.kind) // Kept locally, not reinterpreted.
-        assertNoSickLeaveLeft("ana")
+    // Sick leave (revised D9): a synchronized day state that carries only the date and the state.
+
+    private val sickPayloadText = "1|2026-12-10|SICK_LEAVE|MANUAL|"
+    private fun sick(date: String) = kind(date, DayKind.SICK_LEAVE)
+
+    @Test fun t25_singleSickLeaveDayPropagatesWithOnlyDateAndState() {
+        val a = Device("ana", "A"); val b = Device("ana", "B")
+        assertEquals(EditKind.CREATED, a.put(key("2026-12-10"), sick("2026-12-10")))
+        assertEquals(ChangeOp.UPSERT, a.replica.outbox.single().op)
+        a.sync(); b.sync()
+        assertConverged(a, b)
+        assertEquals(DayKind.SICK_LEAVE, b.day("2026-12-10")!!.kind)
+        assertEquals(sickPayloadText, server.received.single().payload!!.text) // Nothing beyond date and state.
+        assertNoTombstones("ana")
     }
 
-    @Test fun t25_workDayChangedToSickLeaveIsRemovedWithAContentlessTombstone() {
+    @Test fun t25_workDayChangedToSickLeaveIsAnUpdateNotADeletion() {
         val a = Device("ana", "A"); val b = Device("ana", "B")
-        a.put(key("2026-03-02"), day("2026-03-02", "08:00-16:00")); a.sync(); b.sync()
-        assertEquals(EditKind.UPDATED, a.put(key("2026-03-02"), kind("2026-03-02", DayKind.SICK_LEAVE)))
+        a.put(key("2026-12-10"), day("2026-12-10", "17:00-23:00")); a.sync(); b.sync()
+        assertEquals(EditKind.UPDATED, a.put(key("2026-12-10"), sick("2026-12-10")))
         val change = a.replica.outbox.single()
-        assertEquals(ChangeOp.DELETE, change.op)
-        assertNull(change.payload)
+        assertEquals(ChangeOp.UPSERT, change.op)
+        assertEquals(1L, change.baseVersion)
         a.sync(); b.sync()
-        assertNoSickLeaveLeft("ana")
-        assertNull(b.day("2026-03-02")) // Absent on the other device: not converted into a free or work day.
-        assertEquals(DayKind.SICK_LEAVE, a.day("2026-03-02")!!.kind)
-        assertTrue(a.replica.conflicts.isEmpty() && b.replica.conflicts.isEmpty())
+        assertConverged(a, b)
+        assertEquals(PlannedDay(LocalDate.parse("2026-12-10"), DayKind.SICK_LEAVE, emptyList()), b.day("2026-12-10")) // Intervals dropped by the day rules.
+        assertEquals(2L, server.records("ana").getValue(key("2026-12-10")).version)
+        assertNoTombstones("ana")
     }
 
-    @Test fun t25_sharedDataNeverReplacesALocalSickLeaveDaySilently() {
+    @Test fun t25_vacationChangedToSickLeavePropagates() {
         val a = Device("ana", "A"); val b = Device("ana", "B")
-        a.put(key("2026-03-02"), kind("2026-03-02", DayKind.SICK_LEAVE)); a.sync()
-        b.put(key("2026-03-02"), day("2026-03-02", "08:00-16:00")); b.sync()
-        a.sync()
-        assertEquals(ConflictKind.LOCAL_ONLY, a.replica.conflicts.getValue(key("2026-03-02")).kind)
-        assertEquals(DayKind.SICK_LEAVE, a.day("2026-03-02")!!.kind)
-        // Keeping the local sick leave removes the shared version; the sick leave itself is still not sent.
-        assertEquals(ResolutionOutcome.KEPT_LOCAL, a.resolve(key("2026-03-02"), Resolution.KEEP_LOCAL).outcome)
-        assertEquals(ChangeOp.DELETE, a.replica.outbox.single().op)
+        (14..16).forEach { a.put(key("2026-08-$it"), kind("2026-08-$it", DayKind.VACATION)) }
         a.sync(); b.sync()
-        assertNoSickLeaveLeft("ana")
-        assertNull(b.day("2026-03-02"))
-        assertEquals(DayKind.SICK_LEAVE, a.day("2026-03-02")!!.kind)
+        a.put(key("2026-08-15"), sick("2026-08-15")); a.sync(); b.sync()
+        assertConverged(a, b)
+        assertEquals(listOf(DayKind.VACATION, DayKind.SICK_LEAVE, DayKind.VACATION), (14..16).map { b.day("2026-08-$it")!!.kind })
+        val summary = ScheduleSummary.month((14..16).map { b.day("2026-08-$it")!! }, YearMonth.of(2026, 8))
+        assertEquals(2 to 1, summary.vacationDays to summary.sickDays)
+        assertNoTombstones("ana")
     }
 
-    @Test fun t25_forgedSharedSickLeavePayloadIsRefusedEverywhere() {
+    private fun conflictOn(date: String, onA: LocalRecord?, onB: LocalRecord?, initial: LocalRecord? = day(date, "08:00-16:00")): Pair<Device, Device> {
+        // Device ids must be unique per device: operation ids derive from them and the server deduplicates by id.
+        val a = Device("ana", "A-$date"); val b = Device("ana", "B-$date")
+        if (initial != null) { a.put(key(date), initial); a.sync(); b.sync() }
+        a.put(key(date), onA); b.put(key(date), onB)
+        a.sync(); b.sync()
+        return a to b
+    }
+
+    @Test fun t25_workFreeAndVacationAgainstSickLeaveRequireADecision() {
+        listOf("2026-12-10" to day("2026-12-10", "17:00-23:00"), "2026-12-11" to kind("2026-12-11", DayKind.FREE),
+            "2026-12-12" to kind("2026-12-12", DayKind.VACATION)).forEach { (date, other) ->
+            val (a, b) = conflictOn(date, other, sick(date), initial = day(date, "09:00-13:00"))
+            val conflict = b.replica.conflicts.getValue(key(date))
+            assertEquals(setOf(key(date)), b.replica.conflicts.keys)
+            assertEquals(ConflictKind.VERSION, conflict.kind)
+            assertEquals(DayKind.SICK_LEAVE, b.day(date)!!.kind) // Local choice kept until the user decides.
+            assertEquals(other, LocalRecord.Shared(conflict.remote!!.payload!!)) // The other side is kept for the decision, not overwritten.
+            assertTrue(a.replica.conflicts.isEmpty())
+        }
+    }
+
+    @Test fun t25_identicalSickLeaveOnTwoDevicesResolvesAutomatically() {
+        val (a, b) = conflictOn("2026-12-10", sick("2026-12-10"), sick("2026-12-10"))
+        assertConverged(a, b)
+        assertEquals(2L, server.records("ana").getValue(key("2026-12-10")).version)
+    }
+
+    @Test fun t25_sickLeaveAgainstAnActualDeletionIsAConflictNotAMerge() {
+        val (a, b) = conflictOn("2026-12-10", null, sick("2026-12-10"))
+        assertTrue(server.records("ana").getValue(key("2026-12-10")).deleted) // The deletion was a real one.
+        assertTrue(b.replica.conflicts.getValue(key("2026-12-10")).remote!!.deleted)
+        assertEquals(ResolutionOutcome.KEPT_LOCAL, b.resolve(key("2026-12-10"), Resolution.KEEP_LOCAL).outcome)
+        b.sync(); a.sync()
+        assertConverged(a, b)
+        assertEquals(DayKind.SICK_LEAVE, a.day("2026-12-10")!!.kind)
+        assertFalse(server.records("ana").getValue(key("2026-12-10")).deleted)
+    }
+
+    @Test fun t25_sickLeaveEditedIndependentlyOnTwoDevicesAndCancelledResolution() {
+        val (a, b) = conflictOn("2026-12-10", day("2026-12-10", "17:00-23:00"), kind("2026-12-10", DayKind.FREE), initial = sick("2026-12-10"))
+        val before = b.replica
+        assertEquals(ResolutionOutcome.CANCELLED, b.resolve(key("2026-12-10"), Resolution.CANCEL).outcome)
+        assertEquals(before, b.replica)
+        assertEquals(EditKind.BLOCKED_BY_CONFLICT, b.put(key("2026-12-10"), sick("2026-12-10")))
+        assertEquals(ResolutionOutcome.KEPT_REMOTE, b.resolve(key("2026-12-10"), Resolution.KEEP_REMOTE).outcome)
+        assertEquals(kind("2026-12-10", DayKind.FREE), b.replica.recovered.single().content)
+        b.sync()
+        assertConverged(a, b)
+    }
+
+    @Test fun t25_multiDaySickLeaveRangeWhileAnotherDeviceIsOffline() {
+        val a = Device("ana", "A"); val b = Device("ana", "B")
+        (10..14).forEach { a.put(key("2026-12-$it"), day("2026-12-$it", "17:00-23:00")) }
+        a.sync(); b.sync()
+        (10..14).forEach { a.put(key("2026-12-$it"), sick("2026-12-$it")) } // Range marked on A.
+        b.put(key("2026-12-12"), day("2026-12-12", "18:00-23:00")) // B offline edits one day of the range.
+        a.sync(); b.sync()
+        assertEquals(setOf(key("2026-12-12")), b.replica.conflicts.keys) // Only the day edited on both sides.
+        assertEquals(listOf(10, 11, 13, 14).map { DayKind.SICK_LEAVE }, listOf(10, 11, 13, 14).map { b.day("2026-12-$it")!!.kind })
+        b.resolve(key("2026-12-12"), Resolution.KEEP_REMOTE); b.sync()
+        assertConverged(a, b)
+        assertEquals(5, ScheduleSummary.month((10..14).map { b.day("2026-12-$it")!! }, YearMonth.of(2026, 12)).sickDays)
+        assertEquals(5, server.records("ana").size) // No duplicate records.
+        assertNoTombstones("ana")
+    }
+
+    @Test fun t25_interruptedAndDuplicatedSickLeaveOperationsApplyOnce() {
+        val a = Device("ana", "A"); val b = Device("ana", "B")
+        a.put(key("2026-12-10"), day("2026-12-10", "17:00-23:00")); a.sync(); b.sync()
+        a.put(key("2026-12-10"), sick("2026-12-10"))
+        server.failNext(FakeSyncServer.Failure.AFTER_APPLY)
+        assertEquals(SyncStatus.INTERRUPTED, a.sync().status)
+        val sent = a.replica.outbox.single()
+        assertEquals(SyncStatus.COMPLETED, a.sync().status) // Same operation id resent.
+        val request = PushRequest(sent.operationId, sent.key, sent.op, sent.payload, sent.baseVersion)
+        assertTrue(server.push(a.token, "A", listOf(request)).single() is PushResult.Applied) // Duplicate delivery: stored result.
+        assertEquals(2L, server.records("ana").getValue(key("2026-12-10")).version)
+        b.sync()
+        assertConverged(a, b)
+        assertEquals(DayKind.SICK_LEAVE, b.day("2026-12-10")!!.kind)
+    }
+
+    @Test fun t25_staleDeviceReconnectingSeesTheSickLeave() {
+        val a = Device("ana", "A"); val c = Device("ana", "C")
+        a.put(key("2026-12-10"), day("2026-12-10", "17:00-23:00")); a.sync(); c.sync()
+        a.put(key("2026-12-10"), sick("2026-12-10")); a.sync()
+        (11..20).forEach { a.put(key("2026-12-$it"), day("2026-12-$it", "17:00-23:00")); a.sync() }
+        c.sync(page = 3)
+        assertConverged(a, c)
+        assertEquals(DayKind.SICK_LEAVE, c.day("2026-12-10")!!.kind)
+    }
+
+    @Test fun t25_medicalOrUnsupportedFieldsCannotEnterAPayload() {
         val a = Device("ana", "A")
-        val forged = SyncPayload(SyncEntity.SCHEDULED_DAY, "1|2026-03-02|SICK_LEAVE|MANUAL|")
-        assertThrows(SyncFormatException::class.java) { SyncCodecs.decodeDay(key("2026-03-02"), forged) }
-        assertTrue(server.push(a.token, "A", listOf(PushRequest("A-x", key("2026-03-02"), ChangeOp.UPSERT, forged, null))).single() is PushResult.Rejected)
+        val forged = listOf(
+            "1|2026-12-10|SICK_LEAVE|MANUAL||gripe",             // Extra field.
+            "1|2026-12-10|SICK_LEAVE|MANUAL|diagnostico=gripe",   // Free text in the intervals field.
+            "1|2026-12-10|SICK_LEAVE|MANUAL|08:00+0-12:00+0:N",   // Hours on a sick-leave day.
+            "1|2026-12-10|SICK_LEAVE|OCR_REVIEWED|",              // Extra provenance data.
+            "1|2026-12-10|SICK_LEAVE|MANUAL| ",
+        )
+        forged.forEachIndexed { i, text ->
+            val payload = SyncPayload(SyncEntity.SCHEDULED_DAY, text)
+            assertNotNull(text, SyncCodecs.validationError(key("2026-12-10"), payload))
+            assertTrue(text, server.push(a.token, "A", listOf(PushRequest("A-f$i", key("2026-12-10"), ChangeOp.UPSERT, payload, null))).single() is PushResult.Rejected)
+        }
         assertTrue(server.records("ana").isEmpty())
-        server.injectRaw("ana", key("2026-03-03"), SyncPayload(SyncEntity.SCHEDULED_DAY, "1|2026-03-03|SICK_LEAVE|MANUAL|"), 1)
+        server.injectRaw("ana", key("2026-12-11"), SyncPayload(SyncEntity.SCHEDULED_DAY, "1|2026-12-11|SICK_LEAVE|MANUAL||gripe"), 1)
         a.sync()
-        assertNull(a.day("2026-03-03")) // Quarantined, never applied as any other kind.
-        assertTrue(key("2026-03-03") in a.replica.quarantine)
+        assertNull(a.day("2026-12-11")) // Quarantined, never applied or reinterpreted.
+        assertTrue(key("2026-12-11") in a.replica.quarantine)
+        // Structural allowlist: the synchronized day model has no field that could hold medical information.
+        assertEquals(setOf("day", "origin"), DayRecord::class.java.declaredFields.map { it.name }.filterNot { it.startsWith("$") }.toSet())
+        assertEquals(setOf("date", "kind", "intervals"), PlannedDay::class.java.declaredFields.map { it.name }.filterNot { it.startsWith("$") }.toSet())
+        assertThrows(IllegalArgumentException::class.java) { SyncCodecs.encodeDay(DayRecord(PlannedDay(LocalDate.parse("2026-12-10"), DayKind.SICK_LEAVE, emptyList()), "OCR_REVIEWED")) }
+    }
+
+    @Test fun t25_sickLeaveStaysInsideItsAccount() {
+        val ana = Device("ana", "A"); val bob = Device("bob", "B")
+        ana.put(key("2026-12-10"), sick("2026-12-10")); ana.sync()
+        bob.sync()
+        assertTrue(bob.replica.records.isEmpty())
+        assertTrue(server.records("bob").isEmpty())
+        assertEquals(SyncStatus.ACCOUNT_MISMATCH, ana.sync(transport = server.transport(bob.token)).status)
     }
 
     @Test fun t26_vacationIsPreserved() {

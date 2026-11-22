@@ -12,7 +12,8 @@ import java.time.LocalDate
  *  - Versions are assigned by the server only; device clocks never order anything.
  *  - Every outgoing change has a stable operation id; resending it can never apply it twice.
  *  - Different content is never overwritten silently: it becomes a [SyncConflict] for the user.
- *  - Local-only content ([LocalRecord.LocalOnly], e.g. sick leave, decision D9) never enters an outgoing change.
+ *  - Payloads are an allowlist of calendar fields (date, day state, intervals, origin). Sick leave is synchronized
+ *    as a plain day state (revised decision D9): no diagnosis, reason or document field exists anywhere in the model.
  */
 
 /** Data format of synchronized payloads understood by this version. Newer payloads are quarantined, never coerced. */
@@ -28,12 +29,12 @@ data class RecordKey(val entity: SyncEntity, val key: String) {
 /** Canonical, deterministic content of a shareable record. Equal text means equal content. */
 data class SyncPayload(val entity: SyncEntity, val text: String)
 
-/** What a device holds for a key. */
+/**
+ * What a device holds for a key. Every stored calendar state is synchronized; adding a device-only kind of record
+ * would require an explicit owner decision.
+ */
 sealed interface LocalRecord {
-    /** Content that may be synchronized. */
     data class Shared(val payload: SyncPayload) : LocalRecord
-    /** Content that must stay on this device (sick leave). Its text is never copied into a change or sent. */
-    data class LocalOnly(val entity: SyncEntity, val content: String, val reason: String) : LocalRecord
 }
 
 /** The server's state of a record as last seen by this device. */
@@ -92,8 +93,6 @@ enum class ConflictKind {
     VERSION,
     /** Applying the remote record would break a rule across records (overnight overlap, rate periods). */
     INVARIANT,
-    /** A remote record would replace content that must stay on this device. */
-    LOCAL_ONLY,
     /** The server refused the change. */
     REJECTED,
 }

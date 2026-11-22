@@ -51,8 +51,8 @@ object SyncEngine {
     }
 
     /**
-     * Brings the outbox in line with the desired local content of [key]. Local-only content is never queued: if the
-     * server holds a shared version of that key, it is removed with a tombstone, which carries no content.
+     * Brings the outbox in line with the desired local content of [key]. A tombstone is queued only for an actual
+     * deletion (null); every stored state, sick leave included, is an upsert.
      */
     private fun stage(replica: Replica, key: RecordKey, value: LocalRecord?): Replica {
         val inFlight = replica.outbox.lastOrNull { it.key == key && it.state == ChangeState.IN_FLIGHT }
@@ -60,7 +60,7 @@ object SyncEngine {
         val known = replica.known[key]
         // What the server will hold for this key once the device's in-flight change (if any) is applied.
         val serverPayload = if (inFlight != null) inFlight.payload else known?.takeIf { !it.deleted }?.payload
-        val desired = (value as? LocalRecord.Shared)?.payload
+        val desired = (value as LocalRecord.Shared?)?.payload
         if (desired == serverPayload) return replica.copy(outbox = outbox)
         val change = PendingChange(operationId = "${replica.deviceId}-${replica.nextOperation}", key = key,
             op = if (desired == null) ChangeOp.DELETE else ChangeOp.UPSERT, payload = desired,
@@ -130,12 +130,9 @@ object SyncEngine {
     private fun adopt(replica: Replica, key: RecordKey, remote: RemoteRecord?): Replica =
         replica.copy(known = if (remote == null) replica.known - key else replica.known + (key to KnownVersion(remote.version, remote.deleted, remote.payload)))
 
-    /**
-     * Same state on the server: equal shared content, or nothing shared on either side. A local-only record wants
-     * nothing shared, so it agrees with an absent or deleted remote record (its content stays on the device).
-     */
+    /** Same state on the server: equal content, or no record on either side (absent or deleted). */
     private fun sameContent(local: LocalRecord?, remote: RemoteRecord?): Boolean =
-        (local as? LocalRecord.Shared)?.payload == remote?.takeIf { !it.deleted }?.payload
+        (local as LocalRecord.Shared?)?.payload == remote?.takeIf { !it.deleted }?.payload
 
     private fun applyRemote(replica: Replica, remote: RemoteRecord): Replica {
         val key = remote.key
@@ -160,11 +157,6 @@ object SyncEngine {
             }
             // Identical content: unsent edits are no longer needed; an in-flight one will come back as a conflict and be adopted.
             return adopt(replica.copy(outbox = replica.outbox.filterNot { it.key == key && it.state == ChangeState.PENDING }), key, remote)
-        }
-        if (local is LocalRecord.LocalOnly) {
-            return if (remote.deleted) adopt(replica, key, remote)
-                else replica.copy(conflicts = replica.conflicts + (key to SyncConflict(key, ConflictKind.LOCAL_ONLY, local, remote,
-                    "Otro dispositivo guardó datos compartidos en un día que aquí es solo local.")))
         }
         val records = if (remote.deleted) replica.records - key else replica.records + (key to LocalRecord.Shared(remote.payload!!))
         SyncRules.validate(records)?.let { reason ->
