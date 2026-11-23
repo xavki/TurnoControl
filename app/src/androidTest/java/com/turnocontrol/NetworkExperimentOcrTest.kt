@@ -11,12 +11,13 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
 /**
- * Phase 4B.5 network-experiment-only probe: exercises the real ML Kit text recognizer directly, with no UI and no
+ * Phase 4B.5 network-experiment probe: exercises the real ML Kit text recognizer directly, with no UI and no
  * production database, so it can run against ANY package id (the rest of this module's instrumented tests
  * deliberately hardcode "com.turnocontrol.verification" as a safety guard against running on real data, which this
  * test does not touch at all). Used to generate real recognizer activity while traffic/DataTransport/jobscheduler
- * are measured on the networkBaselineVerification and networkStrategyBVerification build types. Never meaningful
- * (and never installed) outside those two disposable, network-enabled variants.
+ * are measured on the networkBaselineVerification and networkStrategyBVerification build types; it also runs, with
+ * no special meaning, as part of the ordinary verification suite (it is a normal androidTest source file, installed
+ * with every verification test APK).
  */
 class NetworkExperimentOcrTest {
     private fun syntheticTable(): Bitmap {

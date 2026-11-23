@@ -500,7 +500,7 @@ grant select, insert on turno.record_history to authenticated;
 ### 7.1 Aislamiento en el dispositivo (personas distintas)
 - **Un archivo de Room por cuenta:**
   - `turnocontrol.db` se queda como está: **nunca se renombra**, por seguridad de los datos. Es la base local y será la base vinculada si el usuario la vincula;
-  - cada cuenta adicional usa `turnocontrol-acct-<sha256(uid)[0..16]>.db`.
+  - cada cuenta adicional usa `turnocontrol-acct-<sha256(uid)[0..16]>.db`, en un directorio propio (`filesDir/accounts/<clave>/`), no en el directorio por defecto de Android; el borrado debe hacerse por esa ruta, no con `Context.deleteDatabase(nombre)` (fase 0.3.0, ver `docs/QA_DISPOSITIVO_0.3.0.md` §7.2).
 - **Registro de cuentas:** un registro local del dispositivo guarda la correspondencia uid → archivo y la base activa.
 - **Consultas:** las de `profileId = 1` siguen siendo válidas, porque cada archivo contiene un solo perfil.
 - **Vínculo:** se guarda **dentro** de la base (`SyncState.accountId`), de modo que viaja con los datos.
