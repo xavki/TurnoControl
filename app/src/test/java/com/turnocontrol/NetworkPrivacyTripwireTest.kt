@@ -83,4 +83,12 @@ class NetworkPrivacyTripwireTest {
         // The merged manifest Robolectric actually loads (testBuildType = "verification") is never one of these.
         assertFalse("android.permission.INTERNET" in info.requestedPermissions.orEmpty())
     }
+
+    // Phase 4B.5 measurement sessions temporarily point testBuildType at a network-experiment build type (see
+    // docs/QA_DISPOSITIVO_0.3.0.md) so the androidTest suite compiles and runs against it, then revert it. This
+    // guards against that toggle ever being left in place: with it left pointing elsewhere, every assertion in this
+    // file would silently check the wrong build type's manifest instead of catching the mistake.
+    @Test fun testBuildTypeIsRevertedToVerification() {
+        assertTrue(java.io.File("build.gradle.kts").readText().contains("testBuildType = \"verification\""))
+    }
 }
