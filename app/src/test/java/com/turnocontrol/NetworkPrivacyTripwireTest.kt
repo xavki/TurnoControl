@@ -24,12 +24,20 @@ class NetworkPrivacyTripwireTest {
 
     @Test fun noNetworkPermissionIsRequested() {
         val requested = info.requestedPermissions.orEmpty().toSet()
-        // Proof that this is the merged manifest: this permission is only added by manifest merging.
-        assertTrue("${context.packageName}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" in requested)
-        // Enabling these requires the measured telemetry controls of PRIVACIDAD_RED_MLKIT_0.3.0.md §10 first.
-        assertFalse("INTERNET pedido antes de cumplir los requisitos de privacidad", "android.permission.INTERNET" in requested)
-        assertFalse("ACCESS_NETWORK_STATE pedido antes de cumplir los requisitos de privacidad", "android.permission.ACCESS_NETWORK_STATE" in requested)
+        // Exact allowlist, not just a denylist of INTERNET/ACCESS_NETWORK_STATE: debug, release and verification
+        // each request exactly this one permission (confirmed by reading each build type's own merged manifest
+        // under app/build/intermediates/merged_manifest/<variant>/.../AndroidManifest.xml), which manifest merging
+        // adds automatically and which carries no privacy risk by itself. Any other permission added to any of
+        // these three build types - network or not - must fail this test until it is reviewed and added here.
+        assertEquals(setOf("${context.packageName}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"), requested)
     }
+
+    // Unit tests run once per build type (testDebugUnitTest, testReleaseUnitTest, testVerificationUnitTest, ...),
+    // each loading that build type's own merged manifest into `info`; unlike androidTest, testBuildType has no
+    // effect here. The isolated OCR proof of concept is only ever declared in the "verification" build type's own
+    // manifest overlay (app/src/verification/AndroidManifest.xml), so it is the only packageName allowed to see it.
+    private val isVerificationBuildType = context.packageName == "com.turnocontrol.verification"
+    private val isolatedOcrServiceName = "com.turnocontrol.ocr.IsolatedOcrService"
 
     @Test fun telemetryComponentInventoryIsUnchanged() {
         val components = (info.services.orEmpty().map { it.name } + info.receivers.orEmpty().map { it.name } + info.providers.orEmpty().map { it.name }).toSet()
@@ -41,16 +49,23 @@ class NetworkPrivacyTripwireTest {
             "com.google.mlkit.common.internal.MlKitComponentDiscoveryService",
             "com.google.mlkit.common.internal.MlKitInitProvider",
         ), telemetry)
-        // No production component runs in an isolated process: the OCR proof of concept lives only in the verification
-        // build, and ML Kit could not run there on an emulator (phase 5D.1).
-        assertTrue(info.services.orEmpty().none { (it.flags and android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 })
+        // No production component runs in an isolated process. The one exact, named exception is the OCR proof of
+        // concept, which only exists in the "verification" build type's own manifest overlay (ML Kit could not run
+        // there on an emulator anyway, phase 5D.1); every other build type must have zero isolated services.
+        val isolated = info.services.orEmpty().filter { (it.flags and android.content.pm.ServiceInfo.FLAG_ISOLATED_PROCESS) != 0 }
+        if (isVerificationBuildType) assertEquals(setOf(isolatedOcrServiceName), isolated.map { it.name }.toSet())
+        else assertTrue(isolated.isEmpty())
     }
 
     @Test fun productionManifestHasNoNetworkConfigurationOrExtraProcesses() {
         val main = java.io.File("src/main/AndroidManifest.xml").readText()
         listOf("networkSecurityConfig", "usesCleartextTraffic", "android:process", "isolatedProcess").forEach { assertFalse(it, main.contains(it)) }
         assertTrue(main.contains("android.permission.INTERNET\" tools:node=\"remove\"") && main.contains("android.permission.ACCESS_NETWORK_STATE\" tools:node=\"remove\""))
-        assertTrue(info.services.orEmpty().none { it.processName != null && it.processName != context.packageName })
+        // Exact, named exception: only the verification build type's own IsolatedOcrService may run in an extra
+        // process (":ocr"); no other extra process is allowed in any build type, including verification.
+        val extraProcesses = info.services.orEmpty().filter { it.processName != null && it.processName != context.packageName }
+        if (isVerificationBuildType) assertEquals(setOf(isolatedOcrServiceName), extraProcesses.map { it.name }.toSet())
+        else assertTrue(extraProcesses.isEmpty())
     }
 
     @Test fun isolatedOcrProofOfConceptStaysInTheVerificationBuildWithoutNetwork() {
@@ -58,7 +73,10 @@ class NetworkPrivacyTripwireTest {
         assertTrue(verification.contains("android:name=\"com.turnocontrol.ocr.IsolatedOcrService\""))
         assertTrue(verification.contains("android:isolatedProcess=\"true\"") && verification.contains("android:exported=\"false\""))
         assertFalse(verification.contains("uses-permission"))
-        assertTrue(info.services.orEmpty().none { it.name == "com.turnocontrol.ocr.IsolatedOcrService" }) // Absent from the debug/release build.
+        // Present only when this build type IS verification; absent from every other build type (debug, release, ...).
+        val present = info.services.orEmpty().any { it.name == isolatedOcrServiceName }
+        if (isVerificationBuildType) assertTrue("IsolatedOcrService debe declararse en la build verification", present)
+        else assertFalse("IsolatedOcrService no debe aparecer fuera de la build verification", present)
     }
 
     // Phase 4B.5 network experiments (docs/PRIVACIDAD_RED_MLKIT_0.3.0.md §4) must stay confined to their own two
@@ -80,10 +98,10 @@ class NetworkPrivacyTripwireTest {
         listOf("TransportBackendDiscovery", "JobInfoSchedulerService", "AlarmManagerSchedulerBroadcastReceiver").forEach {
             assertTrue(it, strategyB.contains(it) && strategyB.contains("tools:node=\"remove\""))
         }
-        // This `info` comes from :app:testDebugUnitTest, so Robolectric loaded the "debug" merged manifest here, not
-        // "verification"'s (testBuildType has no effect on which build type's own unit tests run; it only decides
-        // which build type the single shared androidTest source set compiles/runs against). Both manifests happen to
-        // agree on these permissions, which is what this test actually checks.
+        // This class runs once per build type (testDebugUnitTest, testReleaseUnitTest, testVerificationUnitTest), so
+        // `info` here is whichever of those three is currently executing, never a network-experiment variant's: the
+        // latter only exists with -Pturnocontrol.netExperiment and is never part of an unqualified `./gradlew test`.
+        // All three always-present build types agree on these permissions, which is what this assertion checks.
         assertFalse("android.permission.INTERNET" in info.requestedPermissions.orEmpty())
     }
 

@@ -101,4 +101,24 @@ dependencies {
     androidTestImplementation(platform("androidx.compose:compose-bom:2025.04.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+    // "verification" does not inherit "debug"'s dependency configurations just because it initWith(debug)'s build
+    // type settings: AGP keeps each build type's own *Implementation config separate. AccountUiTest/LinkingUiTest
+    // (Robolectric, createComposeRule()) need the test-only ComponentActivity this artifact adds to the manifest;
+    // without it, testVerificationUnitTest fails those tests with RoboMonitoringInstrumentation RuntimeExceptions.
+    add("verificationImplementation", "androidx.compose.ui:ui-test-manifest")
+}
+// AccountUiTest/LinkingUiTest use createComposeRule() (Robolectric), which needs the test-only ComponentActivity
+// that androidx.compose.ui:ui-test-manifest adds to the merged manifest. That artifact is wired as debugImplementation
+// and verificationImplementation above (both disposable/never-released build types), deliberately NOT as
+// releaseImplementation: unlike "debug" and "verification", a "release" build type can actually become a real
+// release APK, and shipping test scaffolding into that manifest would be a regression this project does not accept
+// just to make an unqualified `./gradlew test` run go green. So these two classes are excluded from
+// testReleaseUnitTest specifically; they still run under testDebugUnitTest and testVerificationUnitTest.
+tasks.withType<Test>().configureEach {
+    if (name == "testReleaseUnitTest") {
+        filter {
+            excludeTestsMatching("com.turnocontrol.ui.AccountUiTest")
+            excludeTestsMatching("com.turnocontrol.ui.LinkingUiTest")
+        }
+    }
 }
