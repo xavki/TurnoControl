@@ -27,8 +27,9 @@ class AccountLinkingTest {
     @get:Rule val temporary = TemporaryFolder()
     private val context = ApplicationProvider.getApplicationContext<Context>()
     @get:Rule val testName = org.junit.rules.TestName()
-    // Ids unique to each test: a database path is never reused right after deletion (intermittent SQLITE_CANTOPEN on
-    // Windows when a WAL file of a just-deleted path is still being released).
+    // Ids unique to each test, so no two tests ever name the same account database file. This alone did not fix the
+    // intermittent SQLITE_CANTOPEN seen here on Windows; the actual fix is that account databases now live in their
+    // own directory (AccountStorage.kt), not the one shared with the guest database's connection teardown.
     private fun idFor(suffix: String): AccountId {
         val hex = java.security.MessageDigest.getInstance("SHA-256").digest((testName.methodName + suffix).toByteArray()).joinToString("") { "%02x".format(it) }
         return AccountId.parse("${hex.take(8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-8${hex.substring(17, 20)}-${hex.substring(20, 32)}")!!
