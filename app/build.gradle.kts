@@ -45,6 +45,14 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     sourceSets["androidTest"].assets.srcDir("schemas")
+    // The network-experiment build types reuse "verification"'s Kotlin fixtures (CalendarTestDatabase, the isolated
+    // OCR proof of concept, etc.) so the existing androidTest suite compiles against them too; see testBuildType
+    // switch instructions in docs/PRIVACIDAD_RED_MLKIT_0.3.0.md §4. Their own AndroidManifest.xml overlay (not
+    // "verification"'s) still decides what each one actually declares.
+    sourceSets["networkBaselineVerification"].java.srcDir("src/verification/java")
+    sourceSets["networkBaselineVerification"].res.srcDir("src/verification/res")
+    sourceSets["networkStrategyBVerification"].java.srcDir("src/verification/java")
+    sourceSets["networkStrategyBVerification"].res.srcDir("src/verification/res")
     testOptions {
         unitTests.isIncludeAndroidResources = true
         unitTests.all { it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2") }
