@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <!-- Disposable network experiment (phase 4B.5, docs/PRIVACIDAD_RED_MLKIT_0.3.0.md §4, "strategy B"): same network
+         permissions as the baseline variant, but with ML Kit's telemetry scheduling/sending components removed via
+         documented manifest-merge mechanisms only (no reflection, no hidden APIs). If ML Kit still functions and no
+         telemetry is sent with these gone, this is the candidate for production once measured. Never installed
+         outside a disposable emulator; never the debug, release or default verification build. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <application>
+        <service android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery" tools:node="remove" />
+        <service android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService" tools:node="remove" />
+        <receiver android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver" tools:node="remove" />
+    </application>
+</manifest>

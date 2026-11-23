@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Disposable network experiment (phase 4B.5, docs/PRIVACIDAD_RED_MLKIT_0.3.0.md §4). Re-adds the permissions
+         app/src/main/AndroidManifest.xml removes, so ML Kit's telemetry path can be measured as a baseline (with its
+         DataTransport/CCT components untouched) against the "strategy B" variant that also removes them. Never
+         installed outside a disposable emulator; never the debug, release or default verification build. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+</manifest>

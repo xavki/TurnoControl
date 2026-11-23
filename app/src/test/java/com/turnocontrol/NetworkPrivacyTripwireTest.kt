@@ -60,4 +60,27 @@ class NetworkPrivacyTripwireTest {
         assertFalse(verification.contains("uses-permission"))
         assertTrue(info.services.orEmpty().none { it.name == "com.turnocontrol.ocr.IsolatedOcrService" }) // Absent from the debug/release build.
     }
+
+    // Phase 4B.5 network experiments (docs/PRIVACIDAD_RED_MLKIT_0.3.0.md §4) must stay confined to their own two
+    // disposable build types, never leak into debug, release or the default verification build, and only ever add
+    // permissions through their own source-set overlay, never by editing build.gradle.kts' shared buildTypes block
+    // or app/src/main or app/src/verification.
+    @Test fun networkExperimentsOnlyAddPermissionsInTheirOwnOverlayAndNeverTouchSharedManifests() {
+        val gradle = java.io.File("build.gradle.kts").readText()
+        listOf("android.permission.INTERNET", "android.permission.ACCESS_NETWORK_STATE", "uses-permission").forEach {
+            assertFalse("No debe declararse un permiso directamente en build.gradle.kts: $it", gradle.contains(it))
+        }
+        val baseline = java.io.File("src/networkBaselineVerification/AndroidManifest.xml").readText()
+        val strategyB = java.io.File("src/networkStrategyBVerification/AndroidManifest.xml").readText()
+        listOf(baseline, strategyB).forEach {
+            assertTrue(it.contains("android.permission.INTERNET") && it.contains("android.permission.ACCESS_NETWORK_STATE"))
+        }
+        // Only strategy B removes the telemetry scheduling/sending components; the baseline leaves them untouched.
+        assertFalse(baseline.contains("tools:node=\"remove\""))
+        listOf("TransportBackendDiscovery", "JobInfoSchedulerService", "AlarmManagerSchedulerBroadcastReceiver").forEach {
+            assertTrue(it, strategyB.contains(it) && strategyB.contains("tools:node=\"remove\""))
+        }
+        // The merged manifest Robolectric actually loads (testBuildType = "verification") is never one of these.
+        assertFalse("android.permission.INTERNET" in info.requestedPermissions.orEmpty())
+    }
 }

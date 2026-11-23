@@ -24,6 +24,19 @@ android {
             applicationIdSuffix = ".verification"
             matchingFallbacks += "debug"
         }
+        // Disposable, emulator-only network experiments for phase 4B.5 (docs/PRIVACIDAD_RED_MLKIT_0.3.0.md §4). Never
+        // the default build: debug, release and "verification" above stay network-free. Each re-adds INTERNET and
+        // ACCESS_NETWORK_STATE only in its own source-set overlay (app/src/<name>/AndroidManifest.xml), never here.
+        create("networkBaselineVerification") {
+            initWith(getByName("verification"))
+            applicationIdSuffix = ".netbaseline"
+            matchingFallbacks += "debug"
+        }
+        create("networkStrategyBVerification") {
+            initWith(getByName("verification"))
+            applicationIdSuffix = ".netstrategyb"
+            matchingFallbacks += "debug"
+        }
     }
     testBuildType = "verification"
     compileOptions {
