@@ -129,13 +129,14 @@ Dos variantes de compilación desechables, ninguna la build por defecto: `networ
 | Trabajos de `JobInfoSchedulerService` creados | 2 (forzados con `cmd jobscheduler run -f`) | 0 |
 | Resultado al forzar los trabajos | 2 peticiones HTTPS reales a `https://firebaselogging.googleapis.com/v0cc/log/batch`, ambas con código 200 (visto en logcat) | — (no hay trabajos que forzar) |
 | `dumpsys netstats detail`, UID de la app | sin entrada en ninguna de las dos ejecuciones, pese a las peticiones confirmadas por logcat | sin entrada |
-| Captura `tcpdump -U -i any` (OCR + reinicio + 60 s inactivo + HOME) | no realizada en esta sesión | 3328 bytes; solo mDNS/adb; **0** apariciones de `firebaselogging` o `googleapis` |
+| Captura `tcpdump -U -i any` (OCR + reinicio + 60 s inactivo + HOME) | **sin control positivo**: no se repitió con la telemetría intacta en esta sesión | 3328 bytes; solo mDNS/adb; **0** apariciones de `firebaselogging` o `googleapis`. Corrobora la ausencia de trabajos/eventos, pero sin una captura equivalente de referencia no se puede afirmar que «ni siquiera se intentó la resolución DNS»: la ausencia de otro tráfico esperado (FCM, comprobación de conectividad, visto en la fase 5D.1) es también parte de lo no explicado |
 | Contenido de los eventos (`events.db` crudo) | sin «PRUEBA», «ALFA», «BETA», «GAMMA», «DELTA», «123» ni «456» en ninguno de los 4 eventos; sí aparece el UUID `ml_sdk_instance_id` en los 4 | — |
 | OCR (texto reconocido, vertical y apaisado) | idéntico en ambas variantes, 5 repeticiones + 1 apaisada | idéntico |
 | Errores (`ClassNotFoundException`, `FATAL EXCEPTION`) | ninguno | ninguno |
 | `com.google.android.gms/.common.stats.GmsCoreStatsService` | registra a la app como `recentCallingPackage` | sin coincidencia en el volcado tomado (no concluyente; la ventana de enlace puede ser breve) |
 
 **Limitaciones del método:**
+- El recuento de eventos de la referencia varió entre comprobaciones de la misma sesión (9 antes de forzar los trabajos, 4 al leer la base cruda poco después): no se ha determinado si los trabajos forzados vacían la cola, si hay un segundo proceso con su propia base, o si la lectura con `run-as` captura un estado intermedio. Dato sin explicar, no una contradicción resuelta.
 - `dumpsys netstats detail` no refleja el tráfico de la app en ninguna de las dos variantes, ni siquiera cuando logcat confirma dos peticiones HTTPS con código 200. No se investigó la causa (posiblemente el intervalo de sondeo del emulador); logcat es la evidencia más fuerte disponible, no netstats.
 - El canal de Google Play services (otro UID) no se puede atribuir con estas herramientas; `GmsCoreStatsService` es una instancia concreta y nombrada de ese canal, que la estrategia B no está diseñada para tocar.
 - Solo se ha medido en API 35 x86_64, igual que en la fase 5D.1.

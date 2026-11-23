@@ -80,14 +80,19 @@ class NetworkPrivacyTripwireTest {
         listOf("TransportBackendDiscovery", "JobInfoSchedulerService", "AlarmManagerSchedulerBroadcastReceiver").forEach {
             assertTrue(it, strategyB.contains(it) && strategyB.contains("tools:node=\"remove\""))
         }
-        // The merged manifest Robolectric actually loads (testBuildType = "verification") is never one of these.
+        // This `info` comes from :app:testDebugUnitTest, so Robolectric loaded the "debug" merged manifest here, not
+        // "verification"'s (testBuildType has no effect on which build type's own unit tests run; it only decides
+        // which build type the single shared androidTest source set compiles/runs against). Both manifests happen to
+        // agree on these permissions, which is what this test actually checks.
         assertFalse("android.permission.INTERNET" in info.requestedPermissions.orEmpty())
     }
 
     // Phase 4B.5 measurement sessions temporarily point testBuildType at a network-experiment build type (see
-    // docs/QA_DISPOSITIVO_0.3.0.md) so the androidTest suite compiles and runs against it, then revert it. This
-    // guards against that toggle ever being left in place: with it left pointing elsewhere, every assertion in this
-    // file would silently check the wrong build type's manifest instead of catching the mistake.
+    // docs/QA_DISPOSITIVO_0.3.0.md §7.1) so the shared androidTest suite compiles and runs against it, then revert
+    // it. The real risk that toggle creates is `:app:assembleAndroidTest` silently building against an
+    // INTERNET-enabled variant if someone runs it without noticing the line was left changed; this guard catches
+    // that before it reaches a commit. It does not protect the JVM tripwires above, which read the debug manifest
+    // regardless of this setting.
     @Test fun testBuildTypeIsRevertedToVerification() {
         assertTrue(java.io.File("build.gradle.kts").readText().contains("testBuildType = \"verification\""))
     }
