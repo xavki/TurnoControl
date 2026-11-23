@@ -150,8 +150,33 @@ Las bases de cuenta (`turnocontrol-acct-<clave>.db`, §7.1 del documento de arqu
 - Verificado que `backup_rules.xml` y `data_extraction_rules.xml` siguen excluyendo la nueva ubicación: ambos excluyen `domain="file" path="."` (todo `filesDir`) por completo, así que la cobertura no cambia.
 - Esta ruta todavía no tiene ningún llamador de producción (las cuentas no están conectadas a la navegación); el cambio solo afecta a los tests y a la futura implementación.
 
-### 7.3 Defecto conocido: `testVerificationUnitTest` falla `NetworkPrivacyTripwireTest` (preexistente)
-`:app:testVerificationUnitTest --tests com.turnocontrol.NetworkPrivacyTripwireTest` falla 3 de 6 pruebas (`telemetryComponentInventoryIsUnchanged`, `productionManifestHasNoNetworkConfigurationOrExtraProcesses`, `isolatedOcrProofOfConceptStaysInTheVerificationBuildWithoutNetwork`): el manifiesto fusionado real de `verification` declara `IsolatedOcrService` en su propio proceso, y esas tres aserciones no lo esperan ahí. Ninguna de las tres se modificó en la sesión que detectó esto (confirmado con `git log -p`), así que el fallo es anterior, no introducido por el trabajo de esa sesión. **`./gradlew test` sin cualificar no está en verde.** Pendiente decidir si esas pruebas deben excluir `verification`, o si `IsolatedOcrService` debe declararse de otra forma.
+### 7.3 Defecto conocido: `testVerificationUnitTest` falla `NetworkPrivacyTripwireTest` — RESUELTO (fase 5D.4)
+Causa raíz (sin cambios respecto a lo descrito originalmente): el manifiesto fusionado real de `verification` declara `IsolatedOcrService` en su propio proceso (`:ocr`, isolated), y tres aserciones de `NetworkPrivacyTripwireTest` (`telemetryComponentInventoryIsUnchanged`, `productionManifestHasNoNetworkConfigurationOrExtraProcesses`, `isolatedOcrProofOfConceptStaysInTheVerificationBuildWithoutNetwork`) asumían que ningún build type tiene un servicio aislado ni un proceso extra, lo que es cierto en `debug`/`release` pero deliberadamente falso en `verification`.
+
+**Corrección aplicada:** las tres aserciones ahora distinguen el build type actual por `context.packageName` (`"com.turnocontrol.verification"` ↔ `isVerificationBuildType`) y usan una lista exacta con un único componente permitido (`com.turnocontrol.ocr.IsolatedOcrService`), nunca una desactivación genérica de la comprobación. Fuera de `verification`, las tres siguen exigiendo cero procesos/servicios aislados, igual que antes. `noNetworkPermissionIsRequested` se endureció de una lista negra (solo `INTERNET`/`ACCESS_NETWORK_STATE`) a una lista exacta (`setOf("<packageName>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION")`), verificada leyendo los tres manifiestos fusionados reales (`app/build/intermediates/merged_manifest/<variante>/.../AndroidManifest.xml`): ningún otro permiso, de red o no, pasa desapercibido en adelante.
+
+**Segundo defecto descubierto al perseguir este (no reportado hasta ahora):** `androidx.compose.ui:ui-test-manifest`, que `AccountUiTest`/`LinkingUiTest` necesitan (`createComposeRule()`, Robolectric) para que el manifiesto cargado tenga el `ComponentActivity` de pruebas, solo estaba declarado como `debugImplementation`. `initWith(debug)` en la definición del build type `verification` no hace que herede esa configuración de dependencias (cada build type tiene las suyas), así que `testVerificationUnitTest` fallaba esos 2×8=16 tests con `RuntimeException` en `RoboMonitoringInstrumentation`, y lo mismo le pasaba a `testReleaseUnitTest`.
+- **`verification`:** se añadió `add("verificationImplementation", "androidx.compose.ui:ui-test-manifest")`. Sin riesgo: `verification` nunca se publica, es desechable.
+- **`release`:** **no** se replicó el mismo cambio ahí. A diferencia de `verification`, `release` sí puede llegar a convertirse en un APK real algún día; añadir ese artefacto ahí metería infraestructura de pruebas en el manifiesto de producción de forma permanente, solo para que un `./gradlew test` sin cualificar estuviera en verde. En su lugar, `AccountUiTest` y `LinkingUiTest` se excluyen explícitamente de `testReleaseUnitTest` (`tasks.withType<Test>().configureEach { if (name == "testReleaseUnitTest") filter { excludeTestsMatching(...) } }`), con el motivo documentado en el propio `build.gradle.kts`.
+
+**Resultado, confirmado con una ejecución limpia (`cleanTestDebugUnitTest cleanTestReleaseUnitTest cleanTestVerificationUnitTest test`, sin tareas `UP-TO-DATE`):**
+
+| Tarea | Resultado |
+|---|---|
+| `:app:testDebugUnitTest` | 347/347 |
+| `:app:testVerificationUnitTest` | 347/347 |
+| `:app:testReleaseUnitTest` | 331/331 (347 menos los 16 de `AccountUiTest`/`LinkingUiTest`, excluidos a propósito, no omitidos por error) |
+| `:app:test` (agregado) | BUILD SUCCESSFUL |
+
+**`./gradlew test` sin cualificar ya está en verde.** Verificado también que el gate de §7.1 sigue intacto tras estos cambios: sin la propiedad, `:app:tasks --all` no contiene ninguna tarea `network*`, `:app:assembleNetworkBaselineVerification --dry-run` falla con `Cannot locate tasks`, y `:app:test --dry-run` solo programa `testDebugUnitTest`, `testReleaseUnitTest` y `testVerificationUnitTest`; con `-Pturnocontrol.netExperiment=networkBaselineVerification` sí aparece el árbol completo (control positivo).
+
+### 7.4 `IsolatedOcrServiceTest` — RESUELTO (fase 5D.4)
+Fallaba con `DeadObjectException` sin que el test lo esperara: aserbaba que el motor aislado devolvía el mismo resultado que el motor en proceso, cuando la fase 5D.1 ya había determinado que ML Kit 16.0.1 no funciona en un proceso aislado (NNAPI `SIGSEGV` bajo `isolated_app`). **Corrección:** el test ahora afirma explícitamente ese fallo documentado (`assertThrows(DeadObjectException::class.java) { ... }`), además de comprobar que el motor en proceso (producción) sigue funcionando con la misma imagen síntetica. No se ha intentado arreglar el OCR aislado: sigue sin ser viable.
+
+**Verificación en el emulador `TurnoControl_Verify_API35` (serie `emulator-5554`, sin dispositivo físico):**
+- 10/10 ejecuciones consecutivas de `IsolatedOcrServiceTest` en solitario: todas pasan.
+- `logcat -d -b crash` y el buffer principal, tras `logcat -c`, muestran exactamente el mecanismo documentado en la fase 5D.1: `Fatal signal 11 (SIGSEGV)` en el proceso `com.turnocontrol.verification:ocr:com.turnocontrol.ocr.IsolatedOcrService`, con la pila `ANeuralNetworks_getRuntimeFeatureLevel → DeviceManager::get() → getDevices → getHidlDevicesForVersion → getAllHalInstanceNames`, precedido por denegaciones SELinux (`avc: denied` sobre `hwbinder`, `device_config_nnapi_native_prop` y `android.hardware.neuralnetworks.IDevice/*`) para `scontext=u:r:isolated_app`. No es un fallo distinto ni una regresión: es la misma causa raíz, confirmada de nuevo, no solo asumida.
+- Suite completa: **43 ejecutadas, 43 superadas, 0 fallidas** (antes: 42/43).
 
 ## 8. Lo que se puede ejecutar ahora
 ```bash
