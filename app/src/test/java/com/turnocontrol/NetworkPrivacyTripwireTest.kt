@@ -87,13 +87,15 @@ class NetworkPrivacyTripwireTest {
         assertFalse("android.permission.INTERNET" in info.requestedPermissions.orEmpty())
     }
 
-    // Phase 4B.5 measurement sessions temporarily point testBuildType at a network-experiment build type (see
-    // docs/QA_DISPOSITIVO_0.3.0.md §7.1) so the shared androidTest suite compiles and runs against it, then revert
-    // it. The real risk that toggle creates is `:app:assembleAndroidTest` silently building against an
-    // INTERNET-enabled variant if someone runs it without noticing the line was left changed; this guard catches
-    // that before it reaches a commit. It does not protect the JVM tripwires above, which read the debug manifest
-    // regardless of this setting.
-    @Test fun testBuildTypeIsRevertedToVerification() {
-        assertTrue(java.io.File("build.gradle.kts").readText().contains("testBuildType = \"verification\""))
+    // The two network-experiment build types and testBuildType's override must only exist when the caller passes
+    // -Pturnocontrol.netExperiment=<name> (docs/QA_DISPOSITIVO_0.3.0.md §7.1). Without that property, `./gradlew
+    // assemble` must never produce an INTERNET-enabled APK and `./gradlew test` must never run this very file
+    // against one: this is a file-level guard against someone replacing the gate with a hardcoded value by mistake.
+    @Test fun networkExperimentBuildTypesStayGatedBehindAProperty() {
+        val gradle = java.io.File("build.gradle.kts").readText()
+        assertTrue(gradle.contains("testBuildType = netExperiment ?: \"verification\""))
+        assertTrue(gradle.contains("if (netExperiment != null) {"))
+        assertFalse("testBuildType no debe fijarse directamente a una variante de experimento",
+            Regex("testBuildType\\s*=\\s*\"network").containsMatchIn(gradle))
     }
 }

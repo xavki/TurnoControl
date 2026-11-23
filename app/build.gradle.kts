@@ -18,41 +18,50 @@ android {
         javaCompileOptions { annotationProcessorOptions { arguments["room.schemaLocation"] = "$projectDir/schemas" } }
     }
     buildFeatures { compose = true }
+    // Phase 4B.5 network-experiment build types (docs/QA_DISPOSITIVO_0.3.0.md §7.1) exist ONLY when this property is
+    // passed, e.g. `-Pturnocontrol.netExperiment=networkBaselineVerification`. Without it, `./gradlew assemble` and
+    // `./gradlew test` never see them: no INTERNET-enabled APK is ever part of a default build, and
+    // NetworkPrivacyTripwireTest never runs against one. Omitting the property (the default for every normal build)
+    // falls back to "verification" for testBuildType, exactly as before this mechanism existed.
+    val netExperiment = (project.findProperty("turnocontrol.netExperiment") as String?)
+        ?.takeIf { it == "networkBaselineVerification" || it == "networkStrategyBVerification" }
     buildTypes {
         create("verification") {
             initWith(getByName("debug"))
             applicationIdSuffix = ".verification"
             matchingFallbacks += "debug"
         }
-        // Disposable, emulator-only network experiments for phase 4B.5 (docs/PRIVACIDAD_RED_MLKIT_0.3.0.md §4). Never
-        // the default build: debug, release and "verification" above stay network-free. Each re-adds INTERNET and
-        // ACCESS_NETWORK_STATE only in its own source-set overlay (app/src/<name>/AndroidManifest.xml), never here.
-        create("networkBaselineVerification") {
-            initWith(getByName("verification"))
-            applicationIdSuffix = ".netbaseline"
-            matchingFallbacks += "debug"
-        }
-        create("networkStrategyBVerification") {
-            initWith(getByName("verification"))
-            applicationIdSuffix = ".netstrategyb"
-            matchingFallbacks += "debug"
+        if (netExperiment != null) {
+            // Disposable, emulator-only. Each re-adds INTERNET and ACCESS_NETWORK_STATE only in its own source-set
+            // overlay (app/src/<name>/AndroidManifest.xml), never here.
+            create("networkBaselineVerification") {
+                initWith(getByName("verification"))
+                applicationIdSuffix = ".netbaseline"
+                matchingFallbacks += "debug"
+            }
+            create("networkStrategyBVerification") {
+                initWith(getByName("verification"))
+                applicationIdSuffix = ".netstrategyb"
+                matchingFallbacks += "debug"
+            }
         }
     }
-    testBuildType = "verification"
+    testBuildType = netExperiment ?: "verification"
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
     sourceSets["androidTest"].assets.srcDir("schemas")
-    // The network-experiment build types reuse "verification"'s Kotlin fixtures (CalendarTestDatabase, the isolated
-    // OCR proof of concept, etc.) so the existing androidTest suite compiles against them too; see the testBuildType
-    // toggle procedure in docs/QA_DISPOSITIVO_0.3.0.md §7. Their own AndroidManifest.xml overlay (not
-    // "verification"'s) still decides what each one actually declares.
-    sourceSets["networkBaselineVerification"].java.srcDir("src/verification/java")
-    sourceSets["networkBaselineVerification"].res.srcDir("src/verification/res")
-    sourceSets["networkStrategyBVerification"].java.srcDir("src/verification/java")
-    sourceSets["networkStrategyBVerification"].res.srcDir("src/verification/res")
+    if (netExperiment != null) {
+        // The network-experiment build types reuse "verification"'s Kotlin fixtures (CalendarTestDatabase, the
+        // isolated OCR proof of concept, etc.) so the existing androidTest suite compiles against them too. Their
+        // own AndroidManifest.xml overlay (not "verification"'s) still decides what each one actually declares.
+        sourceSets["networkBaselineVerification"].java.srcDir("src/verification/java")
+        sourceSets["networkBaselineVerification"].res.srcDir("src/verification/res")
+        sourceSets["networkStrategyBVerification"].java.srcDir("src/verification/java")
+        sourceSets["networkStrategyBVerification"].res.srcDir("src/verification/res")
+    }
     testOptions {
         unitTests.isIncludeAndroidResources = true
         unitTests.all { it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2") }
