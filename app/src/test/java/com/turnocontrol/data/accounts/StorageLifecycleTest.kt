@@ -46,7 +46,7 @@ class StorageLifecycleTest {
     @Before fun setup() { Dispatchers.setMain(UnconfinedTestDispatcher()) }
     @After fun cleanup() {
         store.clear(); Dispatchers.resetMain(); opened.forEach { runCatching { it.close() } }
-        listOf(StorageNamespace.Guest, nsA, nsB).forEach { context.deleteDatabase(layout.locate(it).databaseName) }
+        listOf(StorageNamespace.Guest, nsA, nsB).forEach { context.deleteStorageDatabase(layout.locate(it)) }
     }
     /** A new holder = a new process (Hilt singletons rebuilt), over the same synthetic files. */
     private fun holder() = StorageSessionHolder(context, gate, AccountStorageCoordinator(layout, ActiveNamespaceStore(File(temporary.root, "nb")),
@@ -99,7 +99,7 @@ class StorageLifecycleTest {
         val againA = (storage.switchTo(nsA, a) as SwitchOutcome.Switched).let { storage.scope() }
         assertEquals(listOf("2026-12-02"), againA.schedule.dates())
         assertEquals(1, againA.database.sync().outbox().size) // Pending operations survive.
-        listOf(StorageNamespace.Guest, nsA, nsB).forEach { assertTrue(context.getDatabasePath(layout.locate(it).databaseName).exists()) } // Nothing deleted.
+        listOf(StorageNamespace.Guest, nsA, nsB).forEach { assertTrue(context.databaseFile(layout.locate(it)).exists()) } // Nothing deleted.
     }
 
     @Test fun switchingIsRefusedDuringSavesRestoresAndUncertainWrites() = runTest {

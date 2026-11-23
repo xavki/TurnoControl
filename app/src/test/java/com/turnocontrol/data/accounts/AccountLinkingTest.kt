@@ -43,7 +43,7 @@ class AccountLinkingTest {
 
     @After fun cleanup() {
         opened.forEach { runCatching { it.close() } }
-        listOf(StorageNamespace.Guest, StorageNamespace.forAccount(a), StorageNamespace.forAccount(b)).forEach { context.deleteDatabase(layout.locate(it).databaseName) }
+        listOf(StorageNamespace.Guest, StorageNamespace.forAccount(a), StorageNamespace.forAccount(b)).forEach { context.deleteStorageDatabase(layout.locate(it)) }
     }
     private fun build(location: StorageLocation, guard: SessionGuard = SessionGuard()) =
         StorageDatabases.build(context, location, guard) { it.allowMainThreadQueries() }.also { opened += it }

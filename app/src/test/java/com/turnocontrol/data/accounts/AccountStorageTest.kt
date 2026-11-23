@@ -41,8 +41,9 @@ class AccountStorageTest {
         StorageDatabases.build(context, location, guard) { it.allowMainThreadQueries() }.also { opened += it }
     private fun coordinator() = AccountStorageCoordinator(layout, ActiveNamespaceStore(File(temporary.root, "nobackup")), SwitchJournal(File(temporary.root, "nobackup")),
         gate, ::open, blockers = { blocker }, clock = { Instant.parse("2026-12-01T10:00:00Z") })
-    private val names get() = listOf(StorageNamespace.Guest, nsA, nsB).map { layout.locate(it).databaseName }
-    @After fun cleanup() { opened.forEach { runCatching { it.close() } }; names.forEach { context.deleteDatabase(it) } }
+    private val locations get() = listOf(StorageNamespace.Guest, nsA, nsB).map { layout.locate(it) }
+    private val names get() = locations.map { it.databaseName }
+    @After fun cleanup() { opened.forEach { runCatching { it.close() } }; locations.forEach { context.deleteStorageDatabase(it) } }
 
     private fun day(date: String, text: String) = TimeCellParser.parse(text).let { PlannedDay(LocalDate.parse(date), it.kind, it.intervals) }
     private suspend fun StorageSession.put(vararg days: PlannedDay) = ScheduleRepository(database, gate).let { it.save(it.snapshot(), days.toList()) }
@@ -101,7 +102,7 @@ class AccountStorageTest {
         assertEquals(1, again.database.sync().conflicts().size)
         assertEquals(deviceA.deviceId, again.database.sync().state()!!.deviceId)
         // Nothing was ever deleted.
-        names.forEach { assertTrue(it, context.getDatabasePath(it).exists()) }
+        locations.forEach { assertTrue(it.databaseName, context.databaseFile(it).exists()) }
     }
 
     @Test fun staleRepositoriesFailInsteadOfReadingTheNextNamespace() = runTest {
@@ -174,7 +175,7 @@ class AccountStorageTest {
         assertEquals(StorageNamespace.Guest, restarted.location.namespace)
         assertEquals(listOf("2026-12-01"), restarted.dates())
         assertFalse(SwitchJournal(File(temporary.root, "nobackup")).pending())
-        assertTrue(context.getDatabasePath(layout.locate(nsA).databaseName).exists()) // Partially opened target kept, not deleted.
+        assertTrue(context.databaseFile(layout.locate(nsA)).exists()) // Partially opened target kept, not deleted.
     }
 
     @Test fun wrongBindingsAreRefusedAndThePreviousDataReopens() = runTest {

@@ -45,7 +45,16 @@ sealed interface StorageNamespace {
     }
 }
 
-data class StorageLocation(val namespace: StorageNamespace, val databaseName: String, val recoveryDirectory: File)
+/**
+ * [databaseName] is the short display/legacy name; [databasePath] is what gets passed to Room to actually open the
+ * file. For the guest it is the same bare name (Android's default "databases" directory, untouched for compatibility).
+ * For an account it is an absolute path inside that account's own directory: a different physical directory from the
+ * guest's and from every other account's, never resolved via the shared default "databases" directory. This keeps
+ * accounts from ever racing the guest database's connection teardown on the same directory (observed on Robolectric
+ * on Windows as a transient SQLITE_CANTOPEN while a just-closed connection's statements were still being finalized
+ * asynchronously on a background thread; see AccountLinkingTest).
+ */
+data class StorageLocation(val namespace: StorageNamespace, val databaseName: String, val databasePath: String, val recoveryDirectory: File)
 
 /** Where each namespace lives. Every path is checked to stay inside the app's private files directory. */
 class StorageLayout(private val filesDir: File) {
@@ -54,9 +63,12 @@ class StorageLayout(private val filesDir: File) {
         const val GUEST_RECOVERY = "backup-recovery"
     }
     fun locate(namespace: StorageNamespace): StorageLocation = when (namespace) {
-        StorageNamespace.Guest -> StorageLocation(namespace, GUEST_DATABASE, inside(File(filesDir, GUEST_RECOVERY)))
-        is StorageNamespace.Account -> StorageLocation(namespace, "turnocontrol-acct-${namespace.key}.db",
-            inside(File(File(File(filesDir, "accounts"), namespace.key), GUEST_RECOVERY)))
+        StorageNamespace.Guest -> StorageLocation(namespace, GUEST_DATABASE, GUEST_DATABASE, inside(File(filesDir, GUEST_RECOVERY)))
+        is StorageNamespace.Account -> {
+            val name = "turnocontrol-acct-${namespace.key}.db"
+            val directory = inside(File(File(filesDir, "accounts"), namespace.key))
+            StorageLocation(namespace, name, File(directory, name).path, inside(File(directory, GUEST_RECOVERY)))
+        }
     }
     private fun inside(file: File): File {
         val root = filesDir.canonicalFile
@@ -64,6 +76,17 @@ class StorageLayout(private val filesDir: File) {
         require(canonical.toPath().startsWith(root.toPath())) { "Ruta fuera del almacenamiento privado." }
         return canonical
     }
+}
+
+/** The actual on-disk database file for [location]: the guest's default-directory file, or an account's own file. */
+fun android.content.Context.databaseFile(location: StorageLocation): File =
+    if (location.namespace == StorageNamespace.Guest) getDatabasePath(location.databaseName) else File(location.databasePath)
+
+/** Deletes a namespace's database and its WAL/SHM siblings. Tests only; production never deletes a database. */
+fun android.content.Context.deleteStorageDatabase(location: StorageLocation) {
+    if (location.namespace == StorageNamespace.Guest) { deleteDatabase(location.databaseName); return }
+    val file = databaseFile(location)
+    listOf(file, File(file.path + "-wal"), File(file.path + "-shm"), File(file.path + "-journal")).forEach { it.delete() }
 }
 
 /** A save or switch was refused because storage is being switched. Nothing was written. */
@@ -140,13 +163,15 @@ class StorageSessionClosedException : IllegalStateException("La sesión de almac
 
 /** Builds a namespace database with the shared migrations and its [SessionGuard]. */
 object StorageDatabases {
-    fun build(context: android.content.Context, location: StorageLocation, guard: SessionGuard, configure: (androidx.room.RoomDatabase.Builder<TurnoDatabase>) -> Unit = {}): TurnoDatabase =
-        androidx.room.Room.databaseBuilder(context, TurnoDatabase::class.java, location.databaseName)
+    fun build(context: android.content.Context, location: StorageLocation, guard: SessionGuard, configure: (androidx.room.RoomDatabase.Builder<TurnoDatabase>) -> Unit = {}): TurnoDatabase {
+        if (location.namespace is StorageNamespace.Account) File(location.databasePath).parentFile?.mkdirs()
+        return androidx.room.Room.databaseBuilder(context, TurnoDatabase::class.java, location.databasePath)
             .addMigrations(*com.turnocontrol.data.ALL_MIGRATIONS)
             .addCallback(object : androidx.room.RoomDatabase.Callback() {
                 override fun onOpen(db: androidx.sqlite.db.SupportSQLiteDatabase) = guard.checkOpen()
             })
             .also(configure).build()
+    }
 }
 
 /** One open namespace. Once closed, repositories built on [database] fail loudly and never read data again. */

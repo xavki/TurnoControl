@@ -142,10 +142,10 @@ class AccountUiTest {
             val after = vm.state.first { !it.busy && it.message != null }
             assertEquals(AccountUiState.Guest, after.account)
             assertEquals(listOf("2026-12-01"), ScheduleRepository(coordinator.current!!.database).snapshot().map { it.day.date }) // A's calendar not visible.
-            assertTrue(context.getDatabasePath(layout.locate(ns).databaseName).exists()) // Not deleted.
+            assertTrue(context.databaseFile(layout.locate(ns)).exists()) // Not deleted.
         } finally {
             dbs.forEach { runCatching { it.close() } }
-            listOf(StorageNamespace.Guest, ns).forEach { context.deleteDatabase(layout.locate(it).databaseName) }
+            listOf(StorageNamespace.Guest, ns).forEach { context.deleteStorageDatabase(layout.locate(it)) }
         }
     }
 

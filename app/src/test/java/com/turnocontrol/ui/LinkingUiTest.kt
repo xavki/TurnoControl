@@ -44,7 +44,7 @@ class LinkingUiTest {
     @Before fun setup() { Dispatchers.setMain(UnconfinedTestDispatcher()) }
     @After fun cleanup() {
         store.clear(); Dispatchers.resetMain(); opened.forEach { runCatching { it.close() } }
-        listOf(StorageNamespace.Guest, StorageNamespace.forAccount(account)).forEach { context.deleteDatabase(layout.locate(it).databaseName) }
+        listOf(StorageNamespace.Guest, StorageNamespace.forAccount(account)).forEach { context.deleteStorageDatabase(layout.locate(it)) }
     }
 
     private fun shared(date: String, kind: DayKind, text: String? = null) = SyncCodecs.dayKey(LocalDate.parse(date)) to SyncCodecs.encodeDay(DayRecord(
