@@ -110,6 +110,39 @@ Imágenes **sintéticas** de `OcrImportTest`/`ScheduleFixtures`; nunca fotos rea
 
 **No se afirmará «cero tráfico»** sin estas mediciones archivadas.
 
+### 7.1 Ejecutadas (fase 4B.5, 2026-11-23, emulador `TurnoControl_Verify_API35`, serie `emulator-5554`)
+
+Dos variantes de compilación desechables, ninguna la build por defecto: `networkBaselineVerification` (permisos de red, sin tocar los componentes de telemetría) y `networkStrategyBVerification` (mismos permisos, con `TransportBackendDiscovery`, `JobInfoSchedulerService` y `AlarmManagerSchedulerBroadcastReceiver` eliminados con `tools:node="remove"`). Ambas parten de `initWith(verification)`; su propio `AndroidManifest.xml` decide los permisos, nunca `app/src/main` ni `app/src/verification`.
+
+**Procedimiento para repetir la medición** (temporal, nunca se deja así):
+1. En `app/build.gradle.kts`, cambiar `testBuildType = "verification"` por `"networkBaselineVerification"` o `"networkStrategyBVerification"`.
+2. `./gradlew :app:assemble<Variante> :app:assembleAndroidTest --offline` (el motor de tests se compila contra la variante activa).
+3. Instalar ambos APK con `adb -s <serie> install -r …` y ejecutar `com.turnocontrol.NetworkExperimentOcrTest`, el único de la suite que no exige el paquete `.verification` (el resto tiene una comprobación de seguridad deliberada que lo impide).
+4. Medir (ver resultados abajo).
+5. Desinstalar los paquetes de la variante y **devolver `testBuildType` a `"verification"`** antes de cualquier commit. `NetworkPrivacyTripwireTest.testBuildTypeIsRevertedToVerification` falla si se olvida.
+
+**Resultados:**
+
+| Medición | Referencia (telemetría intacta) | Estrategia B |
+|---|---|---|
+| Eventos en `com.google.android.datatransport.events` tras 5 OCR | 9 | 0 |
+| Trabajos de `JobInfoSchedulerService` creados | 2 (forzados con `cmd jobscheduler run -f`) | 0 |
+| Resultado al forzar los trabajos | 2 peticiones HTTPS reales a `https://firebaselogging.googleapis.com/v0cc/log/batch`, ambas con código 200 (visto en logcat) | — (no hay trabajos que forzar) |
+| `dumpsys netstats detail`, UID de la app | sin entrada en ninguna de las dos ejecuciones, pese a las peticiones confirmadas por logcat | sin entrada |
+| Captura `tcpdump -U -i any` (OCR + reinicio + 60 s inactivo + HOME) | no realizada en esta sesión | 3328 bytes; solo mDNS/adb; **0** apariciones de `firebaselogging` o `googleapis` |
+| Contenido de los eventos (`events.db` crudo) | sin «PRUEBA», «ALFA», «BETA», «GAMMA», «DELTA», «123» ni «456» en ninguno de los 4 eventos; sí aparece el UUID `ml_sdk_instance_id` en los 4 | — |
+| OCR (texto reconocido, vertical y apaisado) | idéntico en ambas variantes, 5 repeticiones + 1 apaisada | idéntico |
+| Errores (`ClassNotFoundException`, `FATAL EXCEPTION`) | ninguno | ninguno |
+| `com.google.android.gms/.common.stats.GmsCoreStatsService` | registra a la app como `recentCallingPackage` | sin coincidencia en el volcado tomado (no concluyente; la ventana de enlace puede ser breve) |
+
+**Limitaciones del método:**
+- `dumpsys netstats detail` no refleja el tráfico de la app en ninguna de las dos variantes, ni siquiera cuando logcat confirma dos peticiones HTTPS con código 200. No se investigó la causa (posiblemente el intervalo de sondeo del emulador); logcat es la evidencia más fuerte disponible, no netstats.
+- El canal de Google Play services (otro UID) no se puede atribuir con estas herramientas; `GmsCoreStatsService` es una instancia concreta y nombrada de ese canal, que la estrategia B no está diseñada para tocar.
+- Solo se ha medido en API 35 x86_64, igual que en la fase 5D.1.
+- La entrada de 2,87 MB sin atribuir de la fase 5D.1 sigue sin explicación.
+
+**Conclusión:** la estrategia B detiene de forma medible la subida de telemetría de ML Kit (0 eventos, 0 trabajos, 0 tráfico hacia el dominio) sin romper el OCR ni producir errores. No se afirma «cero telemetría»: el canal de Google Play services queda fuera del alcance de esta estrategia y no se ha medido de forma concluyente.
+
 ## 8. Lo que se puede ejecutar ahora
 ```bash
 ./gradlew :app:testDebugUnitTest --offline --rerun   # JVM + Robolectric (suite completa)
