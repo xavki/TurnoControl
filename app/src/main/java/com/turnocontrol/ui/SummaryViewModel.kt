@@ -24,6 +24,7 @@ data class SummaryState(
     val monthSummary: PeriodSummary get() = ScheduleSummary.month(days, month)
     val yearSummary: PeriodSummary get() = ScheduleSummary.year(days, year)
     val monthlyTotals: List<Int> get() = ScheduleSummary.monthlyTotalMinutes(days, year)
+    val monthlyExtras: List<Int> get() = ScheduleSummary.monthlyExtraMinutes(days, year)
     val baseRate: BigDecimal? get() = rate("HOURLY_BASE")
     val extraRate: BigDecimal? get() = rate("EXTRA_HOUR")
     val plusRates: Map<String, String> get() = rates.filterKeys { it in rateLabels && it != "EXTRA_HOUR" }

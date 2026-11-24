@@ -17,6 +17,8 @@ object ScheduleSummary {
     fun month(days: List<PlannedDay>, month: YearMonth) = of(days) { YearMonth.from(it) == month }
     fun year(days: List<PlannedDay>, year: Int) = of(days) { it.year == year }
     fun monthlyTotalMinutes(days: List<PlannedDay>, year: Int): List<Int> = (1..12).map { month(days, YearMonth.of(year, it)).totalMinutes }
+    /** Declared extras of each month of [year] (January first); they add up to [year]'s extraMinutes. */
+    fun monthlyExtraMinutes(days: List<PlannedDay>, year: Int): List<Int> = (1..12).map { month(days, YearMonth.of(year, it)).extraMinutes }
     private fun of(days: List<PlannedDay>, inPeriod: (LocalDate) -> Boolean): PeriodSummary =
         days.filter { inPeriod(it.date) }.fold(PeriodSummary()) { acc, day ->
             when (day.kind) {

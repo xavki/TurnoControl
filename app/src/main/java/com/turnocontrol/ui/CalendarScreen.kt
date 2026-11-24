@@ -28,7 +28,7 @@ import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 @Composable
-fun CalendarScreen(model: CalendarViewModel, summary: SummaryViewModel, openDay: () -> Unit, openSummary: (YearMonth) -> Unit, openSettings: () -> Unit) {
+fun CalendarScreen(model: CalendarViewModel, summary: SummaryViewModel, openDay: () -> Unit, openSummary: (YearMonth) -> Unit, openSettings: () -> Unit, openImport: (() -> Unit)? = null) {
     val state by model.state.collectAsStateWithLifecycle()
     val summaryState by summary.state.collectAsStateWithLifecycle()
     val spanish = Locale.forLanguageTag("es")
@@ -74,6 +74,8 @@ fun CalendarScreen(model: CalendarViewModel, summary: SummaryViewModel, openDay:
                 }
             }
             Legend()
+            // Same OCR flow as Ajustes → Importar horario; nothing is saved before the review and the final confirmation.
+            openImport?.let { OutlinedButton(onClick = it, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Importar horario desde una imagen") } }
             CalendarRecoveryActions(model, state)
             state.message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             SectionTitle("Resumen del mes")

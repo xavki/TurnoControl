@@ -85,7 +85,7 @@ fun TurnoApp(model: ConfigurationViewModel, importModel: ImportViewModel, review
     }) { padding ->
         NavHost(navController = nav, startDestination = "Calendario", modifier = Modifier.padding(padding)) {
             composable("Calendario") { CalendarScreen(calendarModel, summaryModel, openDay = { nav.navigate("Detalle") },
-                openSummary = { month -> summaryModel.show(month); tab("Resumen") }, openSettings = openSettings) }
+                openSummary = { month -> summaryModel.show(month); tab("Resumen") }, openSettings = openSettings, openImport = { nav.navigate("Importar") }) }
             composable("Resumen") { SummaryScreen(summaryModel, calendarModel, openDay = { date -> calendarModel.select(date); nav.navigate("Detalle") }, openSettings = openSettings) }
             composable("Detalle") {
                 val detailState by calendarModel.state.collectAsStateWithLifecycle()

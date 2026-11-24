@@ -1,6 +1,8 @@
 package com.turnocontrol.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
@@ -23,6 +25,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private val monthNames = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+private val fullMonthNames = listOf("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre")
 
 @Composable
 fun SummaryScreen(model: SummaryViewModel, calendar: CalendarViewModel, openDay: (LocalDate) -> Unit, openSettings: () -> Unit) {
@@ -50,6 +53,7 @@ fun SummaryScreen(model: SummaryViewModel, calendar: CalendarViewModel, openDay:
             EarningsCard("Bruto estimado del mes", state.monthSummary, state, openSettings)
             SectionTitle("Año · ${state.year}")
             AnnualExtrasCard(state.year, state.yearSummary.extraMinutes)
+            MonthlyExtrasHistory(state.year, state.monthlyExtras, state.month.monthValue, model::selectMonth)
             StatGrid(periodStats(state.yearSummary))
             EarningsCard("Bruto estimado del año", state.yearSummary, state, openSettings)
             SectionTitle("Desglose")
@@ -65,6 +69,27 @@ fun SummaryScreen(model: SummaryViewModel, calendar: CalendarViewModel, openDay:
                             Text("${interval.start}${if (interval.startDayOffset == 1) " (+1 día)" else ""} – ${interval.end}${if (interval.endDayOffset == 1) " (+1 día)" else ""}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/** Declared extras per month of the year; each row selects its month. Readable as a list by a screen reader. */
+@Composable
+private fun MonthlyExtrasHistory(year: Int, extras: List<Int>, selected: Int, select: (Int) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Card(colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLow), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(vertical = 8.dp)) {
+            Text("Horas extra por mes · $year", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            if (extras.all { it == 0 }) Text("Sin horas extra declaradas en $year", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            else extras.forEachIndexed { index, minutes ->
+                if (minutes > 0) Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(selected = selected == index + 1, role = Role.Tab, onClick = { select(index + 1) })
+                    .padding(horizontal = 16.dp).semantics(mergeDescendants = true) { contentDescription = "${fullMonthNames[index]} de $year: ${minutesLabel(minutes)} de horas extra" },
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text(fullMonthNames[index].replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
+                        color = if (selected == index + 1) colors.primary else colors.onSurface)
+                    Text(minutesLabel(minutes), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }

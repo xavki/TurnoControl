@@ -83,4 +83,20 @@ class ScheduleSummaryTest {
         assertEquals(1200, totals[2])
         assertEquals(0, totals.filterIndexed { i, _ -> i != 2 }.sum())
     }
+
+    @Test fun monthlyExtrasHistoryAddsUpToTheYearAndKeepsOvernightShiftsInTheirStartMonth() {
+        val days = listOf(
+            day("2026-01-31", "22:00-02:00", setOf(0)),         // 4 h, January, although it ends on 1 February.
+            day("2026-03-10", "08:00-12:00 / 16:00-17:07", setOf(1)), // 1 h 7 min of a split shift.
+            day("2025-12-31", "22:00-06:00", setOf(0)),          // Previous year: never in 2026.
+            absence("2026-04-01", DayKind.SICK_LEAVE),
+        )
+        val extras = ScheduleSummary.monthlyExtraMinutes(days, 2026)
+        assertEquals(12, extras.size)
+        assertEquals(240, extras[0])
+        assertEquals(0, extras[1])
+        assertEquals(67, extras[2])
+        assertEquals(ScheduleSummary.year(days, 2026).extraMinutes, extras.sum())
+        assertEquals(480, ScheduleSummary.monthlyExtraMinutes(days, 2025)[11])
+    }
 }
