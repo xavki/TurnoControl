@@ -3,8 +3,10 @@ package com.turnocontrol
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,6 +34,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             val theme by model.theme.collectAsStateWithLifecycle()
             val startup by startupModel.state.collectAsStateWithLifecycle()
+            // The in-app theme can differ from the system's: system bar icons must follow the app theme, or a dark app
+            // theme on a light system shows dark status-bar icons on a dark background (seen on the QA emulator).
+            LaunchedEffect(theme.dark) {
+                val style = if (theme.dark) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                    else SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+            }
             TurnoTheme(theme.dark) {
                 // The calendar ViewModels are created lazily, only after the stored data has been accepted.
                 when (val gate = startup) {
@@ -83,7 +92,9 @@ fun TurnoApp(model: ConfigurationViewModel, importModel: ImportViewModel, review
             }
         }
     }) { padding ->
-        NavHost(navController = nav, startDestination = "Calendario", modifier = Modifier.padding(padding)) {
+        // consumeWindowInsets: each screen's TopAppBar would otherwise add the status bar inset a second time (≈ 50 dp gap
+        // under the status bar, seen on the QA emulator); screens without a top bar still get the padding.
+        NavHost(navController = nav, startDestination = "Calendario", modifier = Modifier.padding(padding).consumeWindowInsets(padding)) {
             composable("Calendario") { CalendarScreen(calendarModel, summaryModel, openDay = { nav.navigate("Detalle") },
                 openSummary = { month -> summaryModel.show(month); tab("Resumen") }, openSettings = openSettings, openImport = { nav.navigate("Importar") }) }
             composable("Resumen") { SummaryScreen(summaryModel, calendarModel, openDay = { date -> calendarModel.select(date); nav.navigate("Detalle") }, openSettings = openSettings) }

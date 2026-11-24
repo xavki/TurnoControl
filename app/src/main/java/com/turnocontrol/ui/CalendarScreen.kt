@@ -60,7 +60,9 @@ fun CalendarScreen(model: CalendarViewModel, summary: SummaryViewModel, openDay:
             val rowHeight = if (state.week) 120.dp else 52.dp
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 repeat(weeks) { week ->
-                    Row(Modifier.height(rowHeight).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    // Minimum height, not a fixed one: with a large system font the day number grows and the state
+                    // indicator must stay visible below it (it was squashed at 150 % and pushed out at 200 %).
+                    Row(Modifier.heightIn(min = rowHeight).height(IntrinsicSize.Min).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         repeat(7) { weekday ->
                             val date = first.plusDays((week * 7 + weekday).toLong())
                             val own = byDate[date]
@@ -102,7 +104,7 @@ private fun DayCell(date: LocalDate, own: PlannedDay?, continues: Boolean, today
         Column(Modifier.padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Text(date.dayOfMonth.toString(), style = MaterialTheme.typography.titleSmall,
                 color = if (chosen) MaterialTheme.colorScheme.onPrimaryContainer else if (dimmed) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
-            Row(Modifier.padding(top = 4.dp).height(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(Modifier.padding(top = 4.dp).heightIn(min = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 when (kind) {
                     DayKind.WORK -> Box(Modifier.size(10.dp).background(tint, CircleShape))
                     DayKind.FREE -> Box(Modifier.size(10.dp).border(1.5.dp, tint, CircleShape))

@@ -66,8 +66,8 @@ class IsolatedOcrService : Service() {
             if (code != IsolatedOcrProtocol.RECOGNIZE) return super.onTransact(code, data, reply, flags)
             data.enforceInterface(IsolatedOcrProtocol.DESCRIPTOR)
             val outcome = runCatching {
-                check(Build.VERSION.SDK_INT >= 27) { "OCR aislado no disponible en esta versión de Android." }
-                recognize(data)
+                // An explicit if (not check()) so lint sees the version guard.
+                if (Build.VERSION.SDK_INT >= 27) recognize(data) else error("OCR aislado no disponible en esta versión de Android.")
             }
             reply?.writeInt(if (outcome.isSuccess) IsolatedOcrProtocol.OK else IsolatedOcrProtocol.ERROR)
             reply?.writeString(outcome.getOrNull() ?: (outcome.exceptionOrNull()?.message ?: "Error de OCR"))
@@ -140,7 +140,7 @@ class IsolatedProcessTextRecognitionEngine(private val context: Context, private
                     if (!context.bindService(Intent(context, IsolatedOcrService::class.java), c, Context.BIND_AUTO_CREATE))
                         continuation.cancel(IllegalStateException("No se pudo iniciar el OCR aislado."))
                 }
-                transact(binder, bitmap)
+                if (Build.VERSION.SDK_INT >= 27) transact(binder, bitmap) else error("OCR aislado no disponible en esta versión de Android.")
             } finally {
                 connection?.let { runCatching { context.unbindService(it) } } // Always released, also on timeout or cancellation.
             }
