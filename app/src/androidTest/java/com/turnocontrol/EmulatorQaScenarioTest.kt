@@ -89,7 +89,8 @@ class EmulatorQaScenarioTest {
         tab("Resumen")
         waitDesc("Horas extra del mes ($monthLabel): 9 h 15 min")
         compose.onNodeWithContentDescription("Horas extra acumuladas del año $year: $annual").assertExists()
-        compose.onAllNodesWithText("198,75 €").assertCountEquals(1) // Month card; the year card adds the previous month.
+        // Month card only, unless it is January: then the previous month is last year and the year card equals the month.
+        compose.onAllNodesWithText("198,75 €").assertCountEquals(if (previous.year == year) 1 else 2)
         compose.onNodeWithContentDescription("${month.month.getDisplayName(java.time.format.TextStyle.FULL, spanish)} de $year: 9 h 15 min de horas extra").assertExists()
         // Year transition: 31 December of last year stays in last year.
         compose.onNodeWithContentDescription("Año anterior").performClick()
