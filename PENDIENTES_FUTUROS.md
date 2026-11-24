@@ -13,6 +13,7 @@ Ninguno de estos puntos se ha clasificado como P0 ni P1. Origen: lectura de cód
 
 ## Funcionales (P2)
 - Historial de vigencias de tarifas: hoy la estimación bruta aplica las tarifas actuales a todos los periodos (y lo indica como «Estimación con las tarifas actuales»); un historial requeriría migración Room y se pospone.
+- Horas reales, nóminas reales y extras pagadas frente a compensadas: sin modelo; decisiones N1–N5 en `docs/DECISIONES_NOMINA_0.3.0.md`.
 - Cambio de horario de verano: los totales son nominales.
 - La marca «hoy» puede quedar desfasada si la app sigue abierta pasada la medianoche.
 - El inicio de semana está fijado en lunes, sin atender a la configuración regional.
