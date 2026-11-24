@@ -1,6 +1,6 @@
 # TurnoControl 0.3.0: especificación técnica (planificación)
 
-Estado: **propuesta, sin implementar**. Parte del código tras las correcciones posteriores a 0.2.0: copia de seguridad, protección de compatibilidad y OCR con límite de memoria.
+Estado: **propuesta, sin implementar** (sigue así a 2026-11-24: fichaje real, nóminas y vigencias de tarifas no existen; decisiones pendientes en `docs/DECISIONES_NOMINA_0.3.0.md`; el esquema 5 lo ocupan las tablas de sincronización). Parte del código tras las correcciones posteriores a 0.2.0: copia de seguridad, protección de compatibilidad y OCR con límite de memoria.
 
 Principios:
 - El horario planificado y el trabajo real son datos distintos.

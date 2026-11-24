@@ -89,8 +89,8 @@ class ConflictsViewModel(private val backend: ConflictBackend) : ViewModel() {
             val message = try {
                 val result = backend.resolve(key, resolution)
                 when (result.outcome) {
-                    ResolutionOutcome.KEPT_LOCAL -> "Se conserva la versión de este dispositivo. La otra versión queda recuperable 90 días."
-                    ResolutionOutcome.KEPT_REMOTE -> "Se conserva la versión del otro dispositivo. La de este dispositivo queda recuperable 90 días."
+                    ResolutionOutcome.KEPT_LOCAL -> "Se conserva la versión de este dispositivo. La otra versión se guarda en este dispositivo durante 90 días."
+                    ResolutionOutcome.KEPT_REMOTE -> "Se conserva la versión del otro dispositivo. La de este dispositivo se guarda en él durante 90 días."
                     ResolutionOutcome.ALREADY_IDENTICAL -> "Las dos versiones ya eran iguales; no ha hecho falta cambiar nada."
                     ResolutionOutcome.NO_CONFLICT -> "Este conflicto ya no está pendiente."
                     ResolutionOutcome.REJECTED -> "No se pudo aplicar la decisión: ${result.error ?: "regla no válida"}. No se ha modificado nada."

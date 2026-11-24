@@ -2,13 +2,13 @@
 
 Aplicación Android nativa para organizar turnos programados en un calendario. Permite introducirlos manualmente o preparar propuestas desde una fotografía mediante OCR local, revisarlas y confirmar su guardado.
 
-**Versión 0.2.0 — rediseño de interfaz (en preparación, sin publicar).** No registra horas realmente trabajadas ni calcula nóminas reales: la única cifra económica es una estimación bruta con las tarifas configuradas actualmente. Requiere Android 8.0 (API 26) o superior. Notas de esta versión: [RELEASE_NOTES_0.2.0.md](RELEASE_NOTES_0.2.0.md); versión anterior: [RELEASE_NOTES_0.1.0.md](RELEASE_NOTES_0.1.0.md).
+**Versión 0.2.0 — rediseño de interfaz (en preparación, sin publicar).** No registra horas realmente trabajadas ni calcula nóminas reales: la única cifra económica es una estimación bruta con las tarifas configuradas actualmente. Requiere Android 8.0 (API 26) o superior. Notas de esta versión: [RELEASE_NOTES_0.2.0.md](RELEASE_NOTES_0.2.0.md); versión anterior: [RELEASE_NOTES_0.1.0.md](RELEASE_NOTES_0.1.0.md). Trabajo local de 0.3.0, sin publicar: [RELEASE_NOTES_0.3.0.md](RELEASE_NOTES_0.3.0.md) (borrador).
 
 > Los datos de 0.2.0 (días de vacaciones y baja médica) no son legibles por 0.1.0: no se admite volver a la versión anterior conservando esos datos.
 
 ## Funcionalidades
 
-- Dos pestañas: **Calendario** (calendario, resumen del mes, horas extras del mes y del año, estimación de nómina) y **Resumen** (vista por mes y año con selectores propios, desglose visual y extras declaradas). Ajustes e importación OCR se abren desde el icono de engranaje.
+- Dos pestañas: **Calendario** (calendario, resumen del mes, horas extras del mes y del año, estimación de nómina y acceso a la importación OCR) y **Resumen** (vista por mes y año con selectores propios, horas extra del mes y acumuladas del año, historial de extras por mes, desglose visual y extras declaradas). Ajustes (perfil, contrato, tarifas, tema, importación OCR, copia de seguridad y cuenta) se abre desde el icono de engranaje.
 - Calendario mensual y semanal, navegación entre meses/años y acceso a Hoy.
 - Días de trabajo, libres, **vacaciones**, **baja médica** y sin configurar; detalle, edición y eliminación. Vacaciones y baja médica se marcan por día o por rango de fechas, con confirmación cuando sustituyen turnos; se pueden quitar por periodo contiguo.
 - Contadores de horas normales (total menos extras declaradas), extras, total, días trabajados, libres, vacaciones y baja médica, por mes y por año natural (1 de enero a 31 de diciembre). Los días se asignan al mes de su fecha de inicio; las continuaciones nocturnas no se cuentan dos veces.
@@ -101,11 +101,21 @@ En Windows también sirve Windows PowerShell y la ruta a `adb.exe`. Sin `-AdbPat
 
 *Cifras históricas (preparación del 15/10/2026, anteriores a las correcciones posteriores):* **69 tests locales y 19 Android aprobados**, compilación correcta y lint sin errores, con 43/47 advertencias de mantenimiento. La prueba manual OCR del 15/10/2026 fue aprobada por el usuario para el formato probado. Resultados, incidencias y límites de la verificación: [PREPARACION_V0_1_0.md](docs/PREPARACION_V0_1_0.md).
 
+**Pruebas locales sin dispositivo (0.3.0):**
+
+```bash
+./gradlew --max-workers=1 --offline test                                   # JVM + Robolectric: debug, release y verification
+./gradlew --max-workers=1 --offline :app:lintDebug
+./gradlew --max-workers=1 --offline :app:compileVerificationAndroidTestKotlin  # compila las instrumentadas sin ejecutarlas
+```
+
+Las pruebas de interfaz con Compose (`AccountUiTest`, `LinkingUiTest`, `SummaryCardsTest`, `AppNavigationTest`, `AccessibilityChecksTest`, `ConflictsUiTest`) se excluyen de `testReleaseUnitTest`, porque la variante release no incluye la actividad de prueba, y se ejecutan en debug y verification. `AppNavigationTest` recorre el grafo de navegación real. `AccessibilityChecksTest` comprueba el contraste, el ajuste de línea con fuente al 200 %, los nombres accesibles y las zonas táctiles de 48 dp. Ninguna de las dos sustituye a TalkBack en un dispositivo.
+
 Se prueban migraciones 1→4, 2→4 y 3→4, conservación de configuración, edición/eliminación, medianoche, extras, conflictos y regresión OCR. Las imágenes se generan con Canvas y datos ficticios; las respuestas de los selectores se simulan con Espresso Intents.
 
 ## Privacidad
 
-- Sin cuentas ni backend; el manifiesto elimina permisos de Internet y estado de red.
+- Sin cuentas activas ni backend: la infraestructura de cuentas y sincronización existe en el código, pero el inicio de sesión está desactivado (no hay ningún proveedor real) y la app no se conecta a ningún servidor. El manifiesto elimina los permisos de Internet y estado de red.
 - Sin permisos generales de almacenamiento: se utilizan URI de los selectores. Un proveedor externo puede descargar un archivo antes de entregarlo a la aplicación.
 - Fotografías y documentos OCR completos no se persisten; el estado provisional se pierde al terminar el proceso.
 - Datos en almacenamiento privado de Android; backup automático y transferencia desactivados.
@@ -133,6 +143,10 @@ La versión inicial reúne calendario persistente, Room 4, rediseño e importaci
 - [Preparación y cierre local de v0.1.0](docs/PREPARACION_V0_1_0.md)
 - [Notas de versión 0.1.0](RELEASE_NOTES_0.1.0.md)
 - [Pendientes para futuras versiones](PENDIENTES_FUTUROS.md)
+- [Decisiones de nómina pendientes (0.3.0)](docs/DECISIONES_NOMINA_0.3.0.md)
+- [Cuentas y sincronización: arquitectura y estado local](docs/ARQUITECTURA_0.3.0_CUENTAS_Y_SINCRONIZACION.md)
+- [Lista para la integración con el servidor](docs/INTEGRACION_ORACLE_CHECKLIST.md)
+- [Plan de validación en dispositivo 0.3.0](docs/QA_DISPOSITIVO_0.3.0.md)
 
 ## Licencia
 

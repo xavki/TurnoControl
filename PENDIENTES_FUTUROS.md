@@ -20,6 +20,12 @@ Ninguno de estos puntos se ha clasificado como P0 ni P1. Origen: lectura de cód
 - Los borradores de edición y de revisión OCR se pierden si el sistema mata el proceso (sin `SavedStateHandle`).
 - Tras guardar una importación, la pantalla de revisión conserva los borradores hasta una nueva importación.
 
+## Cuentas y sincronización (antes de activar la sincronización real)
+- `REVIEW_REQUIRED` tras restaurar una copia en una base vinculada: no existe ninguna operación para revisarla y reanudar la sincronización. Hace falta decidir el diseño (probablemente un plan de fusión como el de la primera vinculación) antes de sincronizar de verdad.
+- El reinicio controlado de pantallas (`AccountSwitchRestart`) solo se lanza tras cerrar sesión. El inicio de sesión y el cambio de cuenta (`AuthCoordinator.commitNewAuthentication`) necesitarán el mismo evento cuando exista un proveedor. El evento está probado a nivel de ViewModel; el reinicio de la Activity, no.
+- Las pantallas de primera vinculación y de conflictos existen, pero no están conectadas a la navegación de producción.
+- Lista completa para el servidor: `docs/INTEGRACION_ORACLE_CHECKLIST.md`.
+
 ## Pruebas y entorno
 - Ejecutar la suite instrumentada de 0.2.0 (`connectedVerificationAndroidTest`) en un dispositivo o emulador y regenerar las capturas con `PortfolioScreenshotsTest`: en la preparación de 0.2.0 solo se compiló.
 - Probar la selección desde la galería con una imagen real, otras versiones de Android y recuperación tras fallo de escritura en dispositivo.

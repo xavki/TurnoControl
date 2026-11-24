@@ -1,6 +1,6 @@
 # TurnoControl 0.3.0: cuentas opcionales y sincronización entre dispositivos
 
-Estado: **auditoría y diseño, sin implementar**. Fecha: 2026-11-22.
+Estado original: **auditoría y diseño, sin implementar** (2026-11-22). **El estado actual de la implementación local está en la sección 16**, al final del documento.
 Rama verificada: `feature/0.2.0-redesign`, commit `221cfe2`, árbol limpio.
 
 Alcance de este documento:
@@ -821,3 +821,25 @@ Por qué estas fases primero:
 - los límites actuales del correo integrado de Supabase;
 - la disponibilidad de la protección contra contraseñas filtradas según el plan;
 - el coste exacto de cómputo de Pro.
+
+---
+
+## 16. Estado local de la implementación (2026-11-24)
+
+Resumen verificado en el código y en las pruebas. La sincronización real **no está activa**: no hay ningún proveedor de identidad ni cliente HTTP, y la app de producción no tiene permiso de Internet.
+
+| Pieza | Estado | Pruebas |
+|---|---|---|
+| Base por cuenta, espacio de nombres confirmado, diario de cambio, recuperación tras una interrupción | Implementada | `AccountStorageTest`, `StorageLifecycleTest`; `AccountStorageDirectoryTest` (instrumentada, solo compilada en esta fase) |
+| Sesión cifrada (Keystore), clave por cuenta, fuera de las copias | Implementada | `SessionVaultTest`; `KeystoreSessionVaultTest` (instrumentada) |
+| `AuthManager` (estados, caducidad, revocación) | Implementado con proveedor falso; en producción, un proveedor que siempre falla | `AuthManagerTest` |
+| `AuthCoordinator` (orden entre autenticación y almacenamiento, vuelta atrás) | Implementado | `AuthCoordinatorTest` (13) |
+| Cierre de sesión seguro y reinicio de pantallas tras un cambio confirmado | Implementado (0.3.0: `restartRequired` → `AccountSwitchRestart`) | `AccountUiTest`. El reinicio de la Activity no se ha probado; el inicio de sesión y el cambio de cuenta necesitarán el mismo evento |
+| Vista previa de la primera vinculación y decisiones de fusión | Implementadas; no accesibles desde producción | `LinkMergePlannerTest`, `AccountLinkingTest`, `LinkingUiTest` |
+| Pantalla de conflictos de sincronización | Implementada en 0.3.0; no accesible desde producción | `ConflictsUiTest` (`SyncStore` real y servidor falso) |
+| Cola persistente, UUID de operación, idempotencia, versiones remotas, bajas (tombstones), conflictos, cuarentena, cursor | Implementados | `SyncEngineTest` (t01–t33), `SyncStoreTest` |
+| Bajas médicas: solo fecha y `SICK_LEAVE` | Implementado | `t25_*`, `t25_medicalOrUnsupportedFieldsCannotEnterAPayload`, `ConflictsUiTest.keepLocalKeepsTheSickLeaveAndQueuesItWithoutMedicalDetails` |
+| `REVIEW_REQUIRED` tras restaurar una copia | **Parcial:** se activa y bloquea la sincronización, pero nada lo desactiva | `LegacyBackupCompatibilityTest`, `SyncStoreTest` |
+| Cliente de transporte real, WorkManager, Google y correo | No implementados | — |
+
+Lo que falta para la sincronización real está en `docs/INTEGRACION_ORACLE_CHECKLIST.md`.

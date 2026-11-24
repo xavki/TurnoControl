@@ -81,11 +81,11 @@ Imágenes **sintéticas** de `OcrImportTest`/`ScheduleFixtures`; nunca fotos rea
 | Caso | Esperado | Tipo |
 |---|---|---|
 | TalkBack en Calendario, Resumen, Ajustes, Cuenta e Importar | Todos los controles tienen nombre; botones desactivados anunciados como «todavía no disponible» | MANUAL (APROBACIÓN) |
-| Zonas táctiles de al menos 48 dp | Comprobado en las pantallas de cuenta y vinculación (`AccountUiTest`, `LinkingUiTest`); el resto, a revisar | AHORA (parcial) + MANUAL |
-| Temas claro y oscuro | Contraste legible | AHORA (Robolectric) + MANUAL |
+| Zonas táctiles de al menos 48 dp y nombre accesible | Calendario, Resumen, Ajustes y Detalle a 360 y 320 dp (`AppNavigationTest`), y las pantallas de cuenta y vinculación (`AccountUiTest`, `LinkingUiTest`). Las celdas del calendario miden unos 44 dp de ancho visible a 360 dp y alcanzan 48 dp de zona táctil gracias al tamaño mínimo interactivo de Material | AHORA (Robolectric) + MANUAL |
+| Temas claro y oscuro | Texto con contraste AA de al menos 4,5:1 e indicadores de día de al menos 3:1, en los dos temas (`AccessibilityChecksTest`) | AHORA (Robolectric) + MANUAL |
 | Girar la pantalla | Borradores y decisiones conservados; nada se repite | AHORA (parcial: `LinkingUiTest`) + MANUAL |
-| Texto grande (200 %) | Sin cortes ni solapes en 320 dp | MANUAL |
-| Mensajes de error | En español y con una acción clara | AHORA (textos) + MANUAL |
+| Texto grande (200 %) | Sin cortes ni solapes en 320 dp. Comprobado de forma automática solo que las estadísticas no limitan líneas (`AccessibilityChecksTest`); Robolectric no mide los glifos como un dispositivo | AHORA (parcial) + MANUAL |
+| Mensajes de error | En español, con una acción clara y anunciados por TalkBack (región viva, `AppNavigationTest.aRejectedSaveIsAnnouncedToScreenReaders`) | AHORA (semántica) + MANUAL (lectura real) |
 
 ## 7. Medición del tráfico de red (cuando se autorice un entorno)
 **Hoy el permiso `INTERNET` está eliminado**, y `NetworkPrivacyTripwireTest` falla si alguien lo añade. Las mediciones solo tienen sentido en la build en la que se active.
@@ -203,7 +203,8 @@ Fallaba con `DeadObjectException` sin que el test lo esperara: aserbaba que el m
 
 ## 8. Lo que se puede ejecutar ahora
 ```bash
-./gradlew :app:testDebugUnitTest --offline --rerun   # JVM + Robolectric (suite completa)
+./gradlew --max-workers=1 --offline test --rerun   # JVM + Robolectric en debug, release y verification
+./gradlew :app:testDebugUnitTest --offline --rerun   # solo debug (suite completa)
 ./gradlew :app:lintDebug --offline
 ./gradlew :app:compileVerificationAndroidTestKotlin --offline   # compila las instrumentadas sin ejecutarlas
 bash backend/scripts/run-local-tests.sh   # SQL/RLS en un contenedor local sin red (requiere Docker)
