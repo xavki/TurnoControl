@@ -76,7 +76,7 @@ fun CalendarScreen(model: CalendarViewModel, summary: SummaryViewModel, openDay:
             // Same OCR flow as Ajustes → Importar horario; nothing is saved before the review and the final confirmation.
             openImport?.let { OutlinedButton(onClick = it, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text("Importar horario desde una imagen") } }
             CalendarRecoveryActions(model, state)
-            state.message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            state.message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.announced()) }
             SectionTitle("Resumen del mes")
             StatGrid(periodStats(monthSummary))
             SectionTitle("Horas extra")
@@ -216,8 +216,8 @@ fun ImportConfirmationScreen(model: CalendarViewModel, back: () -> Unit, calenda
                 }
             }
         }
-        blocker?.let { Text(it, color = colors.error) }
-        state.message?.let { Text(it) }
+        blocker?.let { Text(it, color = colors.error, modifier = Modifier.announced()) }
+        state.message?.let { Text(it, modifier = Modifier.announced()) }
         Button(onClick = { asking = true }, enabled = editable && state.importReady && blocker == null, modifier = Modifier.fillMaxWidth()) { Text("Confirmar y guardar turnos") }
         TextButton(onClick = back, enabled = !state.busy) { Text("Volver a revisión") }
         TextButton(onClick = calendar, enabled = !state.busy) { Text("Continuar en calendario manual") }

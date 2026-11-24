@@ -39,8 +39,8 @@ fun ImportScreen(model: ImportViewModel, onSourceChanged: () -> Unit, review: (O
         Text("Hasta 20 MiB. Las fotos vertical y horizontal se procesan con la misma resolución (hasta 12 megapíxeles); las imágenes pequeñas se amplían para mejorar el reconocimiento.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.loading) CircularProgressIndicator()
-        pickerError?.let { Text(it) }
-        state.message?.let { Text(it) }
+        pickerError?.let { Text(it, modifier = Modifier.announced()) }
+        state.message?.let { Text(it, modifier = Modifier.announced()) }
         state.image?.let { image ->
             Image(image.bitmap.asImageBitmap(), contentDescription = "Vista previa de la imagen seleccionada",
                 modifier = Modifier.fillMaxWidth().height(280.dp), contentScale = ContentScale.Fit)

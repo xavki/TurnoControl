@@ -7,13 +7,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import java.math.BigDecimal
 import java.util.Locale
 
 data class StatItem(val label: String, val value: String, val icon: ImageVector, val tint: Color)
+
+/** Error and confirmation texts: TalkBack reads them when they appear or change, without moving the focus. */
+fun Modifier.announced(): Modifier = semantics { liveRegion = LiveRegionMode.Polite }
 
 fun euros(value: BigDecimal): String = String.format(Locale.forLanguageTag("es-ES"), "%,.2f €", value)
 

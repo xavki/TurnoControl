@@ -112,13 +112,18 @@ dependencies {
 // and verificationImplementation above (both disposable/never-released build types), deliberately NOT as
 // releaseImplementation: unlike "debug" and "verification", a "release" build type can actually become a real
 // release APK, and shipping test scaffolding into that manifest would be a regression this project does not accept
-// just to make an unqualified `./gradlew test` run go green. So these two classes are excluded from
+// just to make an unqualified `./gradlew test` run go green. So these Compose UI classes are excluded from
 // testReleaseUnitTest specifically; they still run under testDebugUnitTest and testVerificationUnitTest.
 tasks.withType<Test>().configureEach {
     if (name == "testReleaseUnitTest") {
         filter {
             excludeTestsMatching("com.turnocontrol.ui.AccountUiTest")
             excludeTestsMatching("com.turnocontrol.ui.LinkingUiTest")
+            // Same reason (createComposeRule/createAndroidComposeRule need that test-only activity).
+            excludeTestsMatching("com.turnocontrol.ui.SummaryCardsTest")
+            excludeTestsMatching("com.turnocontrol.ui.AppNavigationTest")
+            excludeTestsMatching("com.turnocontrol.ui.AccessibilityChecksTest")
+            excludeTestsMatching("com.turnocontrol.ui.ConflictsUiTest")
         }
     }
 }

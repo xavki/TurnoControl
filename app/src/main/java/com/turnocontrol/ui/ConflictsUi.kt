@@ -8,9 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -69,7 +66,6 @@ internal fun conflictReason(kind: ConflictKind) = when (kind) {
     ConflictKind.VERSION -> "Se cambió en este dispositivo y en otro a la vez."
     ConflictKind.INVARIANT -> "Aplicar la versión del otro dispositivo rompería una regla (por ejemplo, turnos solapados)."
     ConflictKind.REJECTED -> "El servidor rechazó el cambio de este dispositivo."
-    else -> "Requiere tu decisión."
 }
 
 class ConflictsViewModel(private val backend: ConflictBackend) : ViewModel() {
@@ -116,7 +112,7 @@ fun ConflictsScreen(model: ConflictsViewModel, onBack: () -> Unit) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Ninguna versión se descarta sin tu decisión. Mientras un conflicto esté pendiente, ese dato no se puede editar.", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
             if (state.loading || state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-            state.message?.let { Text(it, modifier = Modifier.testTag("conflicts-message").semantics { liveRegion = LiveRegionMode.Polite }) }
+            state.message?.let { Text(it, modifier = Modifier.testTag("conflicts-message").announced()) }
             if (!state.loading && state.conflicts.isEmpty()) Text("No hay conflictos pendientes.", modifier = Modifier.testTag("conflicts-empty"))
             state.conflicts.forEach { conflict ->
                 Card(Modifier.fillMaxWidth().testTag("conflict-${conflict.key}")) {

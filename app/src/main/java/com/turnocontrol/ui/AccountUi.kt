@@ -158,7 +158,7 @@ fun AccountContent(state: AccountScreenState, onBack: () -> Unit, onSignOut: () 
             state.message?.let { message ->
                 Card(colors = CardDefaults.cardColors(containerColor = colors.secondaryContainer)) {
                     Column(Modifier.padding(16.dp)) {
-                        Text(message, modifier = Modifier.testTag("account-message"))
+                        Text(message, modifier = Modifier.testTag("account-message").announced())
                         TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Entendido") }
                     }
                 }

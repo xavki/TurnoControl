@@ -170,7 +170,7 @@ fun LinkingContent(state: LinkingState, onClose: () -> Unit, onDecide: (RecordKe
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Se copiarán a tu cuenta los datos de este dispositivo que elijas. Los datos sin cuenta se conservan tal cual en este dispositivo, " +
                 "y antes de cambiar nada se guarda una copia de seguridad de ambos lados.", style = MaterialTheme.typography.bodyMedium)
-            state.message?.let { Card(colors = CardDefaults.cardColors(containerColor = colors.secondaryContainer)) { Text(it, Modifier.padding(16.dp).testTag("linking-message")) } }
+            state.message?.let { Card(colors = CardDefaults.cardColors(containerColor = colors.secondaryContainer)) { Text(it, Modifier.padding(16.dp).testTag("linking-message").announced()) } }
             val plan = state.plan
             when (state.phase) {
                 LinkingPhase.LOADING -> Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) { CircularProgressIndicator(Modifier.size(24.dp)); Spacer(Modifier.width(12.dp)); Text("Preparando la vista previa…") }

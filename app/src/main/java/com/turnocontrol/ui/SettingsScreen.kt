@@ -77,7 +77,7 @@ private fun BackupSection(model: BackupViewModel, restoreBlockedReason: String?)
         modifier = Modifier.fillMaxWidth()) { Text("Restaurar desde una copia") }
     restoreBlockedReason?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
     if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-    state.message?.let { Text(it, color = if (state.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface) }
+    state.message?.let { Text(it, color = if (state.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface, modifier = Modifier.announced()) }
     state.preview?.let { preview -> RestorePreviewDialog(preview, state.busy, model::confirmRestore, model::cancelRestore) }
 }
 
@@ -143,7 +143,7 @@ private fun ConfigurationForm(state: ConfigurationState, model: ConfigurationVie
     field("Tarifa base EUR/h (opcional)", d.hourlyRate) { model.update(d.copy(hourlyRate = it)) }
     rateLabels.forEach { (type, label) -> field("$label (opcional)", d.extraRates[type].orEmpty()) { model.update(d.copy(extraRates = d.extraRates + (type to it))) } }
     Text("Las tarifas alimentan solo la estimación bruta de Calendario y Resumen. Los pluses se muestran sin cálculo automático.")
-    state.message?.let { Text(it, modifier = Modifier.fillMaxWidth()) }
+    state.message?.let { Text(it, modifier = Modifier.fillMaxWidth().announced()) }
     Button(onClick = model::save, enabled = !state.saving, modifier = Modifier.fillMaxWidth()) { Text(if (state.saving) "Guardando…" else "Guardar configuración") }
     HorizontalDivider()
     Text("Apariencia", style = MaterialTheme.typography.titleMedium)

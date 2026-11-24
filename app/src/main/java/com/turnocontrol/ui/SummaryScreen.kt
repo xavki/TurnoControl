@@ -2,7 +2,6 @@ package com.turnocontrol.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
@@ -84,7 +83,7 @@ private fun MonthlyExtrasHistory(year: Int, extras: List<Int>, selected: Int, se
             Text("Horas extra por mes · $year", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
             if (extras.all { it == 0 }) Text("Sin horas extra declaradas en $year", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             else extras.forEachIndexed { index, minutes ->
-                if (minutes > 0) Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(selected = selected == index + 1, role = Role.Tab, onClick = { select(index + 1) })
+                if (minutes > 0) Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(selected = selected == index + 1, onClick = { select(index + 1) })
                     .padding(horizontal = 16.dp).semantics(mergeDescendants = true) { contentDescription = "${fullMonthNames[index]} de $year: ${minutesLabel(minutes)} de horas extra" },
                     verticalAlignment = Alignment.CenterVertically) {
                     Text(fullMonthNames[index].replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),

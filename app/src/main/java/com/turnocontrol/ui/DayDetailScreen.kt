@@ -103,7 +103,7 @@ fun DayDetailScreen(model: CalendarViewModel, back: () -> Unit) {
                     if (gap > 0) Text("Descanso ${interval.end}–${next.start}: ${minutesLabel(gap)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                 }
             }
-            state.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            state.message?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.announced()) }
             CalendarRecoveryActions(model, state)
             if (date != null) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -242,7 +242,7 @@ private fun ShiftEditorDialog(model: CalendarViewModel, editor: ShiftEditor, sta
                         }
                     }
                 }
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.announced()) }
                 CalendarRecoveryActions(model, state)
             }
         },
