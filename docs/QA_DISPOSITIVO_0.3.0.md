@@ -72,9 +72,10 @@ Imágenes **sintéticas** de `OcrImportTest`/`ScheduleFixtures`; nunca fotos rea
 | Cifrado de la sesión | Keystore real: clave por cuenta, alteraciones detectadas, borrado al cerrar sesión, fuera de las copias | `SessionVaultTest` (JVM, con un sustituto del Keystore); `KeystoreSessionVaultTest` (instrumentada, solo compilada) | AHORA (parcial) + APROBACIÓN |
 | Vista previa de la vinculación y conflictos | «Combinar» por defecto; sustituir datos exige una segunda confirmación; cancelar no cambia nada | `LinkingUiTest`, `AccountLinkingTest` | AHORA |
 | Los datos del invitado se conservan | La base de invitado no cambia | `AccountLinkingTest`, `LinkingUiTest` | AHORA |
-| Cambiar de cuenta y cerrar sesión | Bloqueado mientras hay operaciones en curso; la cuenta se conserva | `StorageLifecycleTest`, `AccountUiTest` | AHORA; en producción todavía no hay cuentas |
-| Sincronización pendiente | Las operaciones sobreviven a reinicios y no se duplican | `SyncStoreTest` | AHORA |
-| Inicio de sesión real (Google y correo) | — | No implementado | Bloqueado: proveedor real y proyecto Supabase |
+| Cambiar de cuenta y cerrar sesión | Bloqueado mientras hay operaciones en curso; la cuenta se conserva | `StorageLifecycleTest`, `AccountUiTest`, `AuthCoordinatorTest` (fase 5E.1) | AHORA; en producción todavía no hay cuentas |
+| Sincronización pendiente | Las operaciones sobreviven a reinicios y no se duplican | `SyncStoreTest`, `AuthCoordinatorTest` (a través de inicio/cierre de sesión) | AHORA |
+| Coordinación entre autenticación y almacenamiento | Inicio de sesión, cambio de cuenta y cierre de sesión mantienen siempre de acuerdo el estado de `AuthManager` y la base de datos activa; nunca una cuenta con los datos de otra | `AuthCoordinatorTest` (fase 5E.1, 13 pruebas) | AHORA |
+| Inicio de sesión real (Google y correo) | — | No implementado | Bloqueado: proveedor real y proyecto Supabase (fase 5F.1) |
 
 ## 6. Accesibilidad
 | Caso | Esperado | Tipo |
@@ -208,3 +209,36 @@ Fallaba con `DeadObjectException` sin que el test lo esperara: aserbaba que el m
 bash backend/scripts/run-local-tests.sh   # SQL/RLS en un contenedor local sin red (requiere Docker)
 ```
 Con aprobación: `connectedVerificationAndroidTest` en el emulador. Instala la app `.verification`; **nunca** la app real.
+
+## 9. Coordinador de autenticación y almacenamiento (fase 5E.1, 2026-11-24)
+
+### 9.1 Qué existía ya y qué faltaba
+Antes de esta fase, `AuthManager` (dominio, máquina de estados de sesión), `EncryptedSessionVault` (persistencia cifrada por cuenta) y `AccountStorageCoordinator`/`StorageSessionHolder` (cambio seguro de base de datos activa) ya existían, probados por separado, pero **nada los conectaba entre sí**. Un inicio de sesión real podía, en teoría, dejar `AuthManager` diciendo "autenticado como X" sin que la base de datos activa fuera realmente la de X. Esta fase añade esa pieza que faltaba: `AuthCoordinator` (`app/src/main/java/com/turnocontrol/data/auth/AuthCoordinator.kt`).
+
+### 9.2 Cómo coordina
+- **Inicio de sesión y cambio de cuenta:** primero se confirma la identidad con el proveedor (`AuthManager`), después se cambia el almacenamiento (`StorageSessionHolder`). Si el cambio de almacenamiento falla o se rechaza, se deshace el lado de autenticación: un inicio de sesión fallido nunca cambia la base de datos activa.
+- **Cerrar sesión:** al revés — el destino (invitado) ya se conoce de antemano, así que el almacenamiento cambia primero; `AuthManager` solo se actualiza si ese cambio se confirma. Si el almacenamiento está ocupado (un guardado, una restauración o una sincronización en curso), la sesión se queda exactamente como estaba.
+- **Cambio de cuenta A→B con fallo de almacenamiento:** `AuthManager.switchAccount` ya ha revocado la sesión de A y guardado la de B en el momento en que se intenta el cambio de almacenamiento; no hay forma limpia de "volver a A". El coordinador cae hasta el invitado en ambas capas — una decisión deliberada y conservadora: cuesta un inicio de sesión adicional, nunca expone los datos de una cuenta bajo la identidad de otra.
+- **La caída al invitado puede fallar también** (el mismo bloqueo que impidió el cambio a B también puede impedir volver al invitado). En ese caso, el estado publicado nunca miente: comprueba directamente a qué cuenta está vinculada la base de datos activa, no solo lo que dice `AuthManager`, y muestra "vuelve a iniciar sesión" para esa cuenta — nunca "Sin cuenta" (que ocultaría que se están mostrando datos de alguien) ni la identidad de la cuenta a la que nunca se llegó a cambiar.
+- **Reinicio del proceso:** `restoreOnStart()` solo mira el espacio de almacenamiento ya confirmado (sin cambiarlo) y, si está vinculado a una cuenta, intenta restaurar la sesión cifrada de esa cuenta exactamente.
+
+### 9.3 Defecto real encontrado y corregido durante las pruebas
+`AuthManager.state` es un único campo compartido. Un segundo intento de inicio de sesión que es rechazado (porque la app ya está autenticada) también escribe su propio `Failed(InvalidState, …)` en ese campo, como efecto secundario. La primera versión de `AuthCoordinator.publish()` volvía a leer ese campo compartido después de que el propio cambio de almacenamiento terminara con éxito — así que, si el intento rechazado se colaba justo en medio, su escritura podía "tapar" el resultado correcto del primer intento, y la interfaz acababa mostrando "Sin cuenta" tras un inicio de sesión que en realidad había tenido éxito. `AuthCoordinatorTest.concurrentSignInAttemptsOnlyOneSucceeds` lo reprodujo de forma determinista (no por una carrera real de hilos, sino forzando el intercalado con un proveedor de prueba que se pausa a propósito). **Corregido:** la rama de éxito publica el estado exacto que ella misma obtuvo, no el que haya en el campo compartido en ese instante.
+
+### 9.4 Disponible en producción, y qué no
+- `AccountViewModel`'s constructor de producción (`@Inject`) ya usa el `AuthCoordinator` real: `restoreOnStart()` se ejecuta al crear la pantalla, y `signOut` llama de verdad al coordinador. **Esto es intencional y seguro**, no una activación oculta: el `AuthProvider` de producción (`AuthModule.UnconfiguredAuthProvider`) siempre falla cualquier intento de inicio de sesión, así que en la práctica la app sigue mostrando "Sin cuenta" de forma incondicional, exactamente como antes de esta fase.
+- `providersAvailable` sigue en `false` en producción: los botones de "Iniciar sesión" y "Crear cuenta" siguen deshabilitados. Esto es un interruptor de interfaz independiente del backend, que seguirá en `false` hasta que exista un proveedor real (Google o correo, fase 5F.1 en adelante).
+- No se ha añadido ninguna dependencia nueva, no se ha tocado el manifiesto, el permiso `INTERNET` sigue eliminado.
+
+### 9.5 Pruebas (fase 5E.1)
+`AuthCoordinatorTest` (13 pruebas nuevas, `app/src/test/java/com/turnocontrol/data/auth/`): invitado inicial, inicio de sesión correcto, credenciales inválidas, intentos concurrentes, sesión caducada, sesión revocada (con limpieza de la sesión persistida, datos intactos), cerrar sesión, cambio de cuenta sin exponer datos cruzados, fallo de almacenamiento durante el inicio de sesión (reversión a invitado), fallo de almacenamiento durante el cambio de cuenta (caída a invitado o, si ese propio intento también falla, "vuelve a iniciar sesión" honesto), reinicio del proceso con restauración de la sesión, sesión ilegible con los datos de la cuenta todavía vinculados, y operaciones de sincronización pendientes que sobreviven a un ciclo completo de cierre e inicio de sesión.
+
+También se actualizó `AccountUiTest.productionViewModelIsAlwaysAGuestWithoutWorkingSignIn` para usar el cableado real de producción (antes probaba un `AccountViewModel()` sin ningún coordinador detrás).
+
+**Resultado, ejecución completa (`./gradlew --no-daemon --max-workers=1 test`):** `testDebugUnitTest` 360/360, `testVerificationUnitTest` 360/360, `testReleaseUnitTest` 344/344 (360 menos los 16 de Compose excluidos a propósito desde la fase 5D.4). Lint: 0 errores, 26 avisos, sin cambios.
+
+### 9.6 Limitaciones que quedan
+- No hay ningún proveedor real (Google o correo): todo lo anterior está probado con `FakeAuthProvider`, nunca con una cuenta real.
+- `pendingChanges`/`conflicts` en la pantalla de cuenta se calculan leyendo la cola de sincronización real de la sesión activa, pero nunca hay nada que sincronizar de verdad todavía (sin backend).
+- El flujo completo de primera vinculación (combinar datos del invitado con una cuenta) existe (`AccountLinkingTest`, `LinkingUiTest`) pero sigue sin un disparador conectado desde la interfaz de producción: sigue siendo una decisión explícita pendiente, no automática, tal como exige el diseño.
+- Reautenticación tras una sesión caducada: el estado `Expired` ya se detecta y se muestra, pero no hay ningún proveedor real con el que reautenticarse todavía.
