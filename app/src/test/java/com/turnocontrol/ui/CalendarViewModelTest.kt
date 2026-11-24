@@ -166,6 +166,13 @@ class CalendarViewModelTest {
         model.saveShift()
         assertTrue(model.state.value.message!!.contains("no es posterior"))
         assertEquals(480, repo.snapshot().single().planned().totalMinutes())
+        // Both on the next day already: no hint to switch it on; the validator's own message applies.
+        model.slot(0, IntervalDraft(LocalTime.of(9, 0), LocalTime.of(8, 0), startOffset = 1, endOffset = 1))
+        model.saveShift()
+        model.state.first { !it.busy }
+        assertFalse(model.state.value.message.orEmpty().contains("activa «Día siguiente»"))
+        assertNotNull(model.state.value.message)
+        assertEquals(480, repo.snapshot().single().planned().totalMinutes())
     }
     @Test fun visualEditorKeepsInvalidDraftAndSupportsExplicitExtraAfterMidnight() = runTest(dispatcher) {
         model.select(date)

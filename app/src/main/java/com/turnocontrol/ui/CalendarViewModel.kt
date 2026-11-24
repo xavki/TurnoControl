@@ -139,7 +139,7 @@ class CalendarViewModel internal constructor(
             val intervals = editor.slots.map { draft ->
                 require(draft.start != null && draft.end != null) { "Elige la entrada y salida de cada intervalo." }
                 // Same rule as the validator (end must be after start); only the explanation is specific to midnight.
-                require(draft.startOffset != draft.endOffset || draft.end > draft.start) {
+                require(draft.startOffset != 0 || draft.endOffset != 0 || draft.end > draft.start) {
                     "La salida (${draft.end}) no es posterior a la entrada (${draft.start}). Si el turno termina después de medianoche, activa «Día siguiente» en el día de salida."
                 }
                 ProvisionalInterval(draft.start, draft.end, draft.startOffset, draft.endOffset, draft.extra)
