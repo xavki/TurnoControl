@@ -144,6 +144,29 @@ class CalendarViewModelTest {
         model.state.first { !it.busy && it.days.isEmpty() }
         assertTrue(repo.snapshot().isEmpty())
     }
+    @Test fun shiftEndingAfterMidnightWithoutNextDayIsRejectedWithAnExplanationAndNothingIsWritten() = runTest(dispatcher) {
+        model.select(date)
+        model.state.first { !it.busy && it.editorReady }
+        model.openShift()
+        model.slot(0, IntervalDraft(LocalTime.of(22, 0), LocalTime.of(6, 0)))
+        model.saveShift()
+        assertTrue(model.state.value.message!!.contains("activa «Día siguiente»"))
+        assertNotNull(model.state.value.editor) // The draft is kept for correction.
+        assertTrue(repo.snapshot().isEmpty())
+        // Same times, explicitly next day: one overnight shift of 8 h attributed to the start day.
+        model.slot(0, IntervalDraft(LocalTime.of(22, 0), LocalTime.of(6, 0), endOffset = 1))
+        model.saveShift()
+        model.state.first { !it.busy && it.editor == null }
+        val saved = repo.snapshot().single()
+        assertEquals(date.toString(), saved.day.date)
+        assertEquals(480, saved.planned().totalMinutes())
+        // Equal entry and exit on the same day is not a 24 h shift either.
+        model.openShift()
+        model.slot(0, IntervalDraft(LocalTime.of(9, 0), LocalTime.of(9, 0)))
+        model.saveShift()
+        assertTrue(model.state.value.message!!.contains("no es posterior"))
+        assertEquals(480, repo.snapshot().single().planned().totalMinutes())
+    }
     @Test fun visualEditorKeepsInvalidDraftAndSupportsExplicitExtraAfterMidnight() = runTest(dispatcher) {
         model.select(date)
         model.state.first { !it.busy && it.editorReady }

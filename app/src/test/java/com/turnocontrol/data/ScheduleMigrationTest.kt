@@ -58,6 +58,9 @@ class ScheduleMigrationTest {
                     assertTrue(saved.intervals.none { it.isExtra })
                 }
                 assertEquals(com.turnocontrol.domain.DataFormat.ROOM_SCHEMA_VERSION, db.openHelper.readableDatabase.version)
+                fun pragma(sql: String) = db.openHelper.readableDatabase.query(sql).use { c -> buildList { while (c.moveToNext()) add(c.getString(0)) } }
+                assertEquals(listOf("ok"), pragma("PRAGMA integrity_check"))
+                assertTrue(pragma("PRAGMA foreign_key_check").isEmpty())
             } finally { db.close() }
         } finally { context.deleteDatabase(name) }
     }

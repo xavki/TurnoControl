@@ -46,6 +46,7 @@ fun SummaryScreen(model: SummaryViewModel, calendar: CalendarViewModel, openDay:
             if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             SectionTitle("Mes · ${state.month.format(DateTimeFormatter.ofPattern("MMMM yyyy", spanish))}")
             StatGrid(periodStats(state.monthSummary))
+            MonthExtrasCard(state.month.format(DateTimeFormatter.ofPattern("MMMM yyyy", spanish)), state.monthSummary.extraMinutes)
             EarningsCard("Bruto estimado del mes", state.monthSummary, state, openSettings)
             SectionTitle("Año · ${state.year}")
             AnnualExtrasCard(state.year, state.yearSummary.extraMinutes)

@@ -107,6 +107,35 @@ class SyncSchemaMigrationTest {
         } finally { context.deleteDatabase(name) }
     }
 
+    @Test fun v3CalendarWithSplitOvernightAndFreeDaysReachesV5Intact() = runTest {
+        val name = "sync-migration-v3.db"
+        create(name, 3) { db ->
+            db.execSQL("INSERT INTO Profile VALUES (1, 'Perfil ficticio', '', 'Europe/Madrid')")
+            db.execSQL("INSERT INTO ScheduledDay VALUES (1, 1, '2025-12-31', 'WORK', 'Europe/Madrid', 'MANUAL', 2)")
+            db.execSQL("INSERT INTO ScheduledInterval VALUES (1, 1, 0, 1320, 360, 0, 1)") // 22:00 → 06:00 into the new year.
+            db.execSQL("INSERT INTO ScheduledDay VALUES (2, 1, '2026-01-01', 'FREE', 'Europe/Madrid', 'MANUAL', 1)")
+            db.execSQL("INSERT INTO ScheduledDay VALUES (3, 1, '2026-01-02', 'WORK', 'Europe/Madrid', 'OCR_REVIEWED', 1)")
+            db.execSQL("INSERT INTO ScheduledInterval VALUES (2, 3, 0, 540, 780, 0, 0)") // Split shift 09:00–13:00 …
+            db.execSQL("INSERT INTO ScheduledInterval VALUES (3, 3, 1, 1020, 1260, 0, 0)") // … and 17:00–21:00.
+        }
+        try {
+            open(name).closing { db ->
+                assertEquals(5, db.openHelper.readableDatabase.version)
+                assertEquals(listOf(listOf("ok")), rows(db, "PRAGMA integrity_check"))
+                assertTrue(rows(db, "PRAGMA foreign_key_check").isEmpty())
+                assertEquals(listOf(listOf("1", "1", "0", "1320", "360", "0", "1", "0"), listOf("2", "3", "0", "540", "780", "0", "0", "0"),
+                    listOf("3", "3", "1", "1020", "1260", "0", "0", "0")), rows(db, "SELECT * FROM ScheduledInterval ORDER BY id"))
+                val days = db.schedule().all().map { it.planned() }
+                assertNull(PlannedScheduleValidator.validate(days))
+                assertEquals(listOf(DayKind.WORK, DayKind.FREE, DayKind.WORK), days.map { it.kind })
+                // The overnight shift stays whole in 2025; extras did not exist before v4 and stay at zero.
+                assertEquals(480, ScheduleSummary.year(days, 2025).totalMinutes)
+                assertEquals(480, ScheduleSummary.year(days, 2026).totalMinutes)
+                assertEquals(0, ScheduleSummary.year(days, 2026).extraMinutes)
+            }
+        } finally { context.deleteDatabase(name) }
+    }
+
     @Test fun migratedDatabaseExportsAndRestoresItsOwnBackup() = runTest {
         val name = "sync-migration-backup.db"
         create(name, 4, ::fillV4)
