@@ -60,4 +60,23 @@ class PlannedScheduleTest {
         assertNull(PlannedScheduleValidator.validate(listOf(night)))
         assertTrue(TimeCellParser.parse("18:00-24:00 / 00:00-01:00").intervals.none { it.isExtra })
     }
+
+    @Test fun continuationIndexMatchesThePerCellRuleIncludingMidnightEdges() {
+        fun at(h: Int, m: Int = 0) = java.time.LocalTime.of(h, m)
+        val base = java.time.LocalDate.parse("2026-12-30")
+        val days = listOf(
+            PlannedDay(base, DayKind.WORK, listOf(ProvisionalInterval(at(22), at(6), 0, 1))),                  // Crosses into 31 Dec.
+            PlannedDay(base.plusDays(1), DayKind.WORK, listOf(ProvisionalInterval(at(16), at(0), 0, 1))),       // Ends exactly at midnight.
+            PlannedDay(base.plusDays(2), DayKind.WORK, listOf(ProvisionalInterval(at(18), at(22)), ProvisionalInterval(at(0, 30), at(4), 1, 1))), // Second part entirely next day.
+            PlannedDay(base.plusDays(5), DayKind.WORK, listOf(ProvisionalInterval(at(8), at(8), 0, 1))),        // 24 h shift.
+            PlannedDay(base.plusDays(3), DayKind.SICK_LEAVE, emptyList()),
+        )
+        fun oldRule(date: java.time.LocalDate) = days.any { day -> day.intervals.any { i ->
+            val offset = java.time.temporal.ChronoUnit.DAYS.between(day.date, date).toInt()
+            offset > 0 && PlannedScheduleValidator.start(i) < (offset + 1) * 1440 && PlannedScheduleValidator.end(i) > offset * 1440
+        } }
+        val index = continuationDates(days)
+        (-2L..10L).map { base.plusDays(it) }.forEach { assertEquals("$it", oldRule(it), it in index) }
+        assertEquals(setOf(base.plusDays(1), base.plusDays(3), base.plusDays(6)), index)
+    }
 }

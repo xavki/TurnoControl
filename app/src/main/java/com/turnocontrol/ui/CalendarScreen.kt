@@ -24,7 +24,6 @@ import com.turnocontrol.domain.*
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 @Composable
@@ -33,6 +32,9 @@ fun CalendarScreen(model: CalendarViewModel, summary: SummaryViewModel, openDay:
     val summaryState by summary.state.collectAsStateWithLifecycle()
     val spanish = Locale.forLanguageTag("es")
     val planned = remember(state.days) { state.days.map { it.planned() } }
+    // Indexed once per data change: each cell is then O(1) instead of scanning the whole history on every recomposition.
+    val byDate = remember(planned) { planned.associateBy { it.date } }
+    val continuations = remember(planned) { continuationDates(planned) }
     val monthSummary = ScheduleSummary.month(planned, state.month)
     val yearSummary = ScheduleSummary.year(planned, state.month.year)
     Column(Modifier.fillMaxSize()) {
@@ -61,11 +63,8 @@ fun CalendarScreen(model: CalendarViewModel, summary: SummaryViewModel, openDay:
                     Row(Modifier.height(rowHeight).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                         repeat(7) { weekday ->
                             val date = first.plusDays((week * 7 + weekday).toLong())
-                            val own = planned.firstOrNull { it.date == date }
-                            val continues = planned.any { day -> day.intervals.any { i ->
-                                val offset = ChronoUnit.DAYS.between(day.date, date).toInt()
-                                offset > 0 && PlannedScheduleValidator.start(i) < (offset + 1) * 1440 && PlannedScheduleValidator.end(i) > offset * 1440
-                            } }
+                            val own = byDate[date]
+                            val continues = date in continuations
                             DayCell(date, own, continues, today = date == LocalDate.now(), chosen = date == state.focused,
                                 dimmed = !state.week && YearMonth.from(date) != state.month, enabled = !state.busy && !state.loading,
                                 modifier = Modifier.weight(1f).fillMaxHeight()) { model.select(date); openDay() }

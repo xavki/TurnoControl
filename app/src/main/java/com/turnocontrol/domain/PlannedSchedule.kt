@@ -12,6 +12,16 @@ fun PlannedDay.breakMinutes(): Int = intervals.sortedBy(PlannedScheduleValidator
 fun PlannedDay.regularMinutes() = totalMinutes() - extraMinutes()
 fun PlannedDay.firstInterval() = intervals.minByOrNull(PlannedScheduleValidator::start)
 fun PlannedDay.lastInterval() = intervals.maxByOrNull(PlannedScheduleValidator::end)
+/**
+ * Dates covered by an interval that started on an earlier day (overnight continuations), computed once for the whole
+ * calendar instead of scanning every day for each cell. Same rule as before: the interval overlaps that later date.
+ */
+fun continuationDates(days: List<PlannedDay>): Set<java.time.LocalDate> = buildSet {
+    days.forEach { day -> day.intervals.forEach { interval ->
+        val start = PlannedScheduleValidator.start(interval); val end = PlannedScheduleValidator.end(interval)
+        for (offset in 1..(end - 1) / 1440) if (start < (offset + 1) * 1440 && end > offset * 1440) add(day.date.plusDays(offset.toLong()))
+    } }
+}
 fun minutesLabel(minutes: Int) = "${minutes / 60} h ${minutes % 60} min"
 
 val DayKind.label: String get() = when (this) {
