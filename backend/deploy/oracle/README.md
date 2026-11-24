@@ -18,6 +18,9 @@
 | `tests/resilience-test.sh` | Desconexiones, concurrencia entre cuentas y reinicio de PostgREST con tráfico. |
 | `tests/log-privacy-scan.sh` | Busca secretos, JWT, correos y contenido sincronizado en los registros. |
 | `tests/compose.validation.yaml` | Override que renombra todos los contenedores, redes y volúmenes para una validación local. |
+| `compose.staging.yaml` | Override del staging privado: nombres `turnocontrol-staging-*`, gateway solo en `127.0.0.1`. |
+| `tests/data-integrity-test.sh` | Turnos normal, partido, nocturno y con horas extra, vacaciones, libre y baja; días inválidos, conflicto, lápida, aislamiento y paginación. |
+| `tests/session-lifecycle-test.sh` | Rotación y reutilización de refresh tokens y caducidad real del token de acceso. |
 | `tests/sql/*.sql` | Consultas de verificación de solo lectura. |
 | `SECURITY.md` | Secretos, exposición, registros, privacidad y aspectos legales. |
 | `DEPLOYMENT_PLAN.md` | Requisitos previos, etapas, migración, Caddy, correo, Google y Android. |

@@ -1,0 +1,39 @@
+# PRIVATE STAGING (phase 5F.1C stage 1). Overlay for compose.yaml that renames every container, network and volume so
+# staging can never collide with, or be mistaken for, a production `turnocontrol` deployment on the same host.
+#   docker compose -p turnocontrol-staging -f compose.yaml -f compose.staging.yaml --env-file <staging.env> ...
+# Only synthetic accounts and data. The gateway stays on 127.0.0.1 (reach it through an SSH tunnel).
+services:
+  turnocontrol-db:
+    container_name: turnocontrol-staging-db
+    labels:
+      turnocontrol.environment: staging
+  turnocontrol-auth:
+    container_name: turnocontrol-staging-auth
+    labels:
+      turnocontrol.environment: staging
+  turnocontrol-rest:
+    container_name: turnocontrol-staging-rest
+    labels:
+      turnocontrol.environment: staging
+  turnocontrol-gateway:
+    container_name: turnocontrol-staging-gateway
+    labels:
+      turnocontrol.environment: staging
+
+networks:
+  turnocontrol_internal:
+    name: turnocontrol-staging_internal
+  turnocontrol_egress:
+    name: turnocontrol-staging_egress
+  turnocontrol_edge:
+    name: turnocontrol-staging_edge
+
+volumes:
+  turnocontrol_pgdata:
+    name: turnocontrol-staging_pgdata
+  turnocontrol_db_config:
+    name: turnocontrol-staging_db_config
+  turnocontrol_gateway_data:
+    name: turnocontrol-staging_gateway_data
+  turnocontrol_gateway_config:
+    name: turnocontrol-staging_gateway_config

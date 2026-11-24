@@ -15,7 +15,7 @@ Cada etapa requiere la autorización expresa del propietario. Ninguna etapa toca
 | # | Etapa | Resultado | Vuelta atrás |
 |---|---|---|---|
 | 0 | ✔ **Hecha en 5F.1C, etapa 0** (x86_64; ver `VALIDATION_CHECKLIST.md`). **Prueba local de la imagen de Supabase.** En el PC de desarrollo: `TURNO_SUPABASE_IMAGE=1 TURNO_PG_IMAGE=supabase/postgres:17.6.1.136 bash backend/scripts/run-local-tests.sh`. Requiere aprobar la descarga de esa imagen. | 75 pruebas SQL y la de concurrencia sobre la imagen real, sin GoTrue | Se borra el contenedor desechable. |
-| 1 | **Staging privado en el servidor.** Copiar la carpeta, `generate-secrets.sh` y `preflight.sh`. Después `docker compose up -d` y esperar a que los 4 servicios estén healthy. Acceso solo por túnel SSH. | Pila en marcha y sin exposición | `ROLLBACK_PLAN.md` §1 |
+| 1 | ✔ **Hecha en 5F.1C etapa 1, en ARM64** (proyecto `turnocontrol-staging`, `compose.staging.yaml`). **Staging privado en el servidor.** Copiar la carpeta, `generate-secrets.sh` y `preflight.sh`. Después `docker compose up -d` y esperar a que los 4 servicios estén healthy. Acceso solo por túnel SSH. | Pila en marcha y sin exposición | `ROLLBACK_PLAN.md` §1 |
 | 2 | **Migración.** `scripts/migrate.sh` (simulación), luego `scripts/migrate.sh --apply --first-install` y por último `tests/sql/verify_deployment.sql` y `verify_runtime_settings.sql`. | Esquema, RLS y permisos verificados | §2 |
 | 3 | **Pruebas de seguridad HTTP** con cuentas sintéticas (`tests/api-security-test.sh`). Después se borran las cuentas y se vuelve a cerrar el alta. | Firma, audiencia y caducidad de los JWT, aislamiento A/B y privacidad, comprobados de verdad | §2 |
 | 4 | **Copias.** `backup.sh`, `verify-backup.sh` y primer `restore-drill.sh`. La tarea programada (04:00 UTC, propuesta) solo se instala tras aprobarla. | Restauración probada | §4 |
@@ -53,7 +53,7 @@ Cada etapa requiere la autorización expresa del propietario. Ninguna etapa toca
 
 **Recuperación de la base:** `BACKUP_PLAN.md` §5.
 
-**Verificado en la etapa 0:** `create schema … authorization turno_owner`, `alter … owner to turno_owner` y `grant references on auth.users` funcionan con `supabase_admin` en PG 17.6 (amd64). Falta repetirlo en ARM64, en la etapa 1.
+**Verificado en la etapa 0:** `create schema … authorization turno_owner`, `alter … owner to turno_owner` y `grant references on auth.users` funcionan con `supabase_admin` en PG 17.6 (amd64). Repetido con éxito en ARM64 en la etapa 1.
 
 ## 4. HTTPS y proxy inverso (Caddy)
 El servidor ya tiene un proxy inverso de otro proyecto (`<proxy-existente>`) que gestiona los puertos web públicos y su certificado. **Este plan no lo modifica.**

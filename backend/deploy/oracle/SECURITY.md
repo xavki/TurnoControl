@@ -26,6 +26,12 @@
   - Los tokens de acceso duran 1 h.
   - Los refresh tokens rotan, y si se reutiliza uno se revoca toda su familia.
   - Cambiar la contraseña exige reautenticarse.
+- **Reutilización de un refresh token (verificado en staging ARM64, GoTrue v2.198.0):**
+  - Reutilizar un token ya rotado se rechaza (`refresh_token_already_used`) y GoTrue revoca todos los refresh tokens de la sesión.
+  - Pero `RevokeTokenFamily` pone `updated_at = now()`, y un token revocado se vuelve a aceptar dentro del intervalo de reutilización (`GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL`, 10 s) contado desde ese momento.
+  - Consecuencia: quien tenga el último token puede seguir renovando si actúa en los ~10 s posteriores a la revocación.
+  - No permite saltarse la autenticación (exige poseer un refresh token válido), pero debilita la detección de robo.
+  - **Propuesta (decisión del propietario):** intervalo `0`. La app serializa las renovaciones con `AuthCoordinator`, y GoTrue sigue admitiendo el caso «el cliente no guardó el resultado» (el padre del token activo).
 - **Emisor (`iss`):** PostgREST no lo comprueba (verificado: un token con `iss` ajeno pero firmado con el secreto se acepta). No es explotable sin el secreto, porque la firma ya liga el token a este servidor.
 - **Limitación conocida:** PostgREST valida los tokens sin estado. Un token de acceso sigue siendo válido en las RPC hasta que caduca (como máximo 1 h), aunque la sesión ya se haya cerrado. Verificado en 5F.1C etapa 0: tras cerrar sesión, GoTrue rechaza la sesión, pero las RPC siguen aceptando el token de acceso. Controles propuestos (decisión del propietario):
   - acortar `TURNO_JWT_EXPIRY`, por ejemplo a 15 min (más renovaciones);

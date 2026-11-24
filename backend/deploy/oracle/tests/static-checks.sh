@@ -102,6 +102,8 @@ check "la prueba de firma alterada no toca el último carácter" '! grep -q "\${
 check "el simulacro reaplica los privilegios tras restaurar" 'grep -q "20261124000000_hosting_privileges.sql" "$HERE/scripts/restore-drill.sh"'
 check "el simulacro comprueba el descifrado antes de crear nada" 'grep -q "no descifra la copia" "$HERE/scripts/restore-drill.sh"'
 check "override de validación: ningún nombre de producción" '! grep -nE "^\s+(container_name|name): turnocontrol(-db|-auth|-rest|-gateway|_internal|_egress|_edge|_pgdata|_db_config|_gateway_data|_gateway_config)\s*$" "$HERE/tests/compose.validation.yaml" && [ "$(grep -cE "^\s+(container_name|name): turnocontrol-validation-5f1c0" "$HERE/tests/compose.validation.yaml")" = 11 ]'
+check "override de staging: ningún nombre de producción" '[ "$(grep -cE "^\s+(container_name|name): turnocontrol-staging" "$HERE/compose.staging.yaml")" = 11 ]'
+check "la prueba de sesión espera al intervalo de reutilización antes de comprobar la familia" 'grep -q "pasado el intervalo, toda la familia queda revocada" "$HERE/tests/session-lifecycle-test.sh"'
 check "las copias nunca usan git" '! grep -nE "\bgit (add|commit|push)" "$HERE/scripts/backup.sh"'
 
 # SQL consistency (static).

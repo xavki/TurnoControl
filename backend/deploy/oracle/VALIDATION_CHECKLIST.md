@@ -85,3 +85,24 @@ Estados: **✔ superado** (ejecutado, con evidencia) · **◐ parcial** · **☐
 | Tiempo de espera de cabeceras del gateway (cliente lento cortado) | ✔ 10,0 s |
 | Estabilidad de `api-security-test.sh` | ✔ 6 ejecuciones seguidas con 60/60 (tras corregir la prueba de firma alterada, que fallaba de forma intermitente) |
 | Consumo: reposo ~108 MiB y pico ~158 MiB entre los 4 servicios, sin OOM | ✔ (amd64) |
+
+## Staging privado en ARM64 (5F.1C etapa 1, Oracle VM.Standard.A1.Flex)
+Proyecto `turnocontrol-staging` (`compose.staging.yaml`), gateway solo en `127.0.0.1:18080`, cuentas y datos sintéticos.
+
+| Comprobación | Resultado |
+|---|---|
+| Imágenes `linux/arm64` con los digests fijados; PostgreSQL 17.6 en `aarch64` | ✔ |
+| Arranque en secuencia (db, auth, rest, gateway), todo healthy; ningún puerto en `0.0.0.0`; sin respuesta desde la IP privada ni desde Internet | ✔ |
+| `migrate.sh`: simulación, aplicación, sin pendientes, checksums registrados iguales a los archivos; un segundo `--first-install` se rechaza | ✔ |
+| `verify_deployment.sql` 15/15 y `verify_runtime_settings.sql` 3/3 | ✔ |
+| Escalada con las credenciales reales de `authenticator`: 23/23 denegadas; `authenticator` solo es miembro de `anon` y `authenticated` | ✔ |
+| Suite SQL en la imagen arm64: 75/75, y concurrencia | ✔ |
+| `api-security-test.sh`: 60/60 (×4, también tras reiniciar `auth`, `rest` y la pila completa) | ✔ |
+| `resilience-test.sh` 9/9 · `data-integrity-test.sh` 42/42 · `log-privacy-scan.sh` superado | ✔ |
+| `session-lifecycle-test.sh` 14/14: caducidad real a los 900 s, recuperación con el refresh token, rotación y revocación de familia (con la ventana de 10 s documentada) | ✔ / ◐ ventana |
+| Copias: fallo seguro, rechazo de contenedores ajenos, copia cifrada, detección de alteración y truncado | ✔ |
+| Simulacro arm64: 20/20 y recuentos más huella idénticos; con una clave equivocada falla antes de crear nada | ✔ |
+| Purga simulada de `applied_mutations`: reenviar una operación devuelve CONFLICT y nunca la duplica | ✔ |
+| Parada y arranque controlados de toda la pila: datos idénticos | ✔ |
+| Alta y autoconfirmación cerradas al terminar (`422 signup_disabled`) | ✔ |
+| Contenedores existentes intactos (ID, inicio, 0 reinicios) | ✔ |
