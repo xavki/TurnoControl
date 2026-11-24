@@ -14,6 +14,7 @@
 # Production credential (documented in BACKUP_PLAN.md): write-only on the bucket; retention by bucket lifecycle rules.
 # Backward compatible: TURNO_BACKUP_RCLONE_DEST without TURNO_BACKUP_DEST_TYPE means type rclone.
 
+set -euo pipefail
 MARKER=.turnocontrol-backup-destination
 dest_type() {
   if [ -n "${TURNO_BACKUP_DEST_TYPE:-}" ]; then echo "$TURNO_BACKUP_DEST_TYPE"

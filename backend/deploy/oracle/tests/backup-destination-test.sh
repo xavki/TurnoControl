@@ -3,7 +3,7 @@
 # the usual TURNO_PROJECT / TURNO_CONTAINER_PREFIX / TURNO_ENV_FILE variables pointing at it. Synthetic data only.
 # Creates its own age key pair and backup.env in a temporary work directory, never touches real destinations.
 #   usage: TURNO_TEST_WORKDIR=<empty dir whose path contains "turnocontrol"> tests/backup-destination-test.sh
-set -uo pipefail
+set -euo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 W=${TURNO_TEST_WORKDIR:?}; case "$W" in *turnocontrol*) ;; *) echo "TURNO_TEST_WORKDIR debe contener 'turnocontrol'" >&2; exit 2;; esac
 case "${TURNO_CONTAINER_PREFIX:-}" in *validation*) ;; *) echo "solo contra una pila de validación" >&2; exit 2;; esac
