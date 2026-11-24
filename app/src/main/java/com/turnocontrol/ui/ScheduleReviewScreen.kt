@@ -67,8 +67,8 @@ fun ScheduleReviewScreen(model: ScheduleReviewViewModel, confirm: (List<PlannedD
             OutlinedButton(onClick = model::addManualDay, enabled = !state.loading) { Text("Añadir día manual") }
             Text("Los días excluidos no se guardan. Las vacaciones (VAC) empiezan excluidas: no se convierten en días libres.", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
             state.message?.let { message ->
-                Surface(color = colors.errorContainer, contentColor = colors.onErrorContainer, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("review-message").announced()) {
-                    Text(message, Modifier.padding(12.dp))
+                Surface(color = colors.errorContainer, contentColor = colors.onErrorContainer, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("review-message")) {
+                    Text(message, Modifier.padding(12.dp).announced())
                 }
             }
             Button(onClick = { model.readyForSave()?.let(confirm) }, enabled = !state.loading && state.drafts.any { it.included }, modifier = Modifier.fillMaxWidth().testTag("review-confirm")) {
