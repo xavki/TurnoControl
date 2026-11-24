@@ -1,0 +1,11 @@
+# Real configuration and anything derived from it. Only *.example files are committed.
+.env
+.env.*
+!.env.example
+*.env
+!*.env.example
+secrets/
+backups/
+*.age
+*.dump
+*.sql.gz

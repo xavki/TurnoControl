@@ -1,0 +1,264 @@
+# TurnoControl: minimal self-hosted Supabase-compatible backend (phase 5F.1B). NOT DEPLOYED.
+#
+# Services: Postgres (Supabase image), Auth (GoTrue), REST (PostgREST) and an internal gateway (Caddy).
+# Deliberately absent: Studio, postgres-meta, Realtime, Storage, imgproxy, Edge Runtime, Supavisor, Logflare, Vector.
+#
+# Exposure rules (see SECURITY.md):
+#  - db, auth and rest publish NO ports. Docker-published ports bypass the host firewall's INPUT chain, so "not
+#    exposed" must come from having no `ports:` at all.
+#  - The gateway publishes ONE port and only on 127.0.0.1 (SSH tunnel or a local reverse proxy can reach it; the
+#    Internet cannot).
+#  - db and rest sit only on an `internal: true` network (no route out of the host).
+#
+# Every value comes from .env (never committed). Missing mandatory values make `docker compose config` fail.
+# Images are pinned by tag AND digest (verified 2026-11-24 against Docker Hub; all publish linux/arm64).
+
+name: turnocontrol
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  turnocontrol-db:
+    container_name: turnocontrol-db
+    image: supabase/postgres:17.6.1.136@sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00
+    restart: unless-stopped
+    stop_grace_period: 60s
+    networks: [turnocontrol_internal]
+    volumes:
+      - turnocontrol_pgdata:/var/lib/postgresql/data
+      # pgsodium root key written by the image on first start; losing it makes vault-encrypted data unreadable.
+      - turnocontrol_db_config:/etc/postgresql-custom
+      # Runs ONCE, only on an empty data directory. The TurnoControl migrations are NOT mounted here on purpose:
+      # they are applied explicitly with scripts/migrate.sh (opt-in).
+      - ./db/init/99-turno-roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-turno-roles.sql:ro
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      PGPORT: "5432"
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: postgres
+      PGDATABASE: postgres
+      # Password of supabase_admin and postgres (set by the image on first start).
+      POSTGRES_PASSWORD: ${TURNO_POSTGRES_PASSWORD:?set TURNO_POSTGRES_PASSWORD in .env}
+      # Read by db/init/99-turno-roles.sql on first start only.
+      TURNO_AUTHENTICATOR_PASSWORD: ${TURNO_AUTHENTICATOR_PASSWORD:?set TURNO_AUTHENTICATOR_PASSWORD in .env}
+      TURNO_AUTH_ADMIN_PASSWORD: ${TURNO_AUTH_ADMIN_PASSWORD:?set TURNO_AUTH_ADMIN_PASSWORD in .env}
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      # Sized for a 2 GB container limit (see README.md, "Recursos").
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=1536MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - max_connections=60
+      # Privacy: never write SQL text (which would contain synchronized payloads) to the server log.
+      - -c
+      - log_statement=none
+      - -c
+      - log_min_error_statement=panic
+      - -c
+      - log_min_duration_statement=-1
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    mem_limit: 2g
+    cpus: 2.0
+    pids_limit: 512
+    shm_size: 256m
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+
+  turnocontrol-auth:
+    container_name: turnocontrol-auth
+    image: supabase/gotrue:v2.198.0@sha256:ba8c0c82c574756c835c696df2a2c698020cc408a42034013d3712e34de7964d
+    restart: unless-stopped
+    depends_on:
+      turnocontrol-db:
+        condition: service_healthy
+    # internal: reach the database; egress: SMTP and, if ever enabled, Google's public keys.
+    networks: [turnocontrol_internal, turnocontrol_egress]
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      API_EXTERNAL_URL: ${TURNO_API_EXTERNAL_URL:?set TURNO_API_EXTERNAL_URL in .env}
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${TURNO_AUTH_ADMIN_PASSWORD}@turnocontrol-db:5432/postgres
+      GOTRUE_SITE_URL: ${TURNO_SITE_URL:?set TURNO_SITE_URL in .env}
+      # Exact redirect targets only (comma-separated). Empty = only SITE_URL. No wildcards.
+      GOTRUE_URI_ALLOW_LIST: ${TURNO_REDIRECT_ALLOW_LIST:-}
+      GOTRUE_DISABLE_SIGNUP: ${TURNO_DISABLE_SIGNUP:-true}
+
+      # JWT: HS256 with a server-only secret, shared with PostgREST. 1-hour access tokens.
+      GOTRUE_JWT_SECRET: ${TURNO_JWT_SECRET:?set TURNO_JWT_SECRET in .env}
+      GOTRUE_JWT_EXP: ${TURNO_JWT_EXPIRY:-3600}
+      GOTRUE_JWT_AUD: authenticated
+      # REQUIRED despite GoTrue's "DEPRECATION NOTICE ... not supported" log line: without it the access token carries
+      # no `role` claim and PostgREST rejects every session (verified in 5F.1C stage 0). Keep until a GoTrue upgrade
+      # is proven to emit role=authenticated without it.
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_ISSUER: ${TURNO_API_EXTERNAL_URL}/auth/v1
+
+      # Sessions: rotating refresh tokens; a reused (stolen) refresh token revokes the session family.
+      GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED: "true"
+      GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL: "10"
+      GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION: "true"
+      GOTRUE_PASSWORD_MIN_LENGTH: ${TURNO_PASSWORD_MIN_LENGTH:-10}
+
+      # Hard-coded OFF on purpose: anonymous users would receive role=authenticated, which the RPCs accept.
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+      GOTRUE_SMS_AUTOCONFIRM: "false"
+
+      # E-mail + password. Confirmation required unless explicitly changed for a throwaway staging stack.
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: ${TURNO_MAILER_AUTOCONFIRM:-false}
+      GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED: "true"
+      GOTRUE_MAILER_OTP_EXP: "3600"
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+      GOTRUE_SMTP_ADMIN_EMAIL: ${TURNO_SMTP_ADMIN_EMAIL:-}
+      GOTRUE_SMTP_HOST: ${TURNO_SMTP_HOST:-}
+      GOTRUE_SMTP_PORT: ${TURNO_SMTP_PORT:-587}
+      GOTRUE_SMTP_USER: ${TURNO_SMTP_USER:-}
+      GOTRUE_SMTP_PASS: ${TURNO_SMTP_PASS:-}
+      GOTRUE_SMTP_SENDER_NAME: ${TURNO_SMTP_SENDER_NAME:-TurnoControl}
+      GOTRUE_SMTP_MAX_FREQUENCY: 60s
+
+      # Rate limits (per hour for e-mail; per 5 min per IP for the rest). The client IP comes from a header that the
+      # gateway ALWAYS overwrites, so clients cannot spoof it.
+      GOTRUE_RATE_LIMIT_HEADER: X-Turno-Client-Ip
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: "10"
+      GOTRUE_RATE_LIMIT_VERIFY: "30"
+      GOTRUE_RATE_LIMIT_TOKEN_REFRESH: "150"
+      GOTRUE_RATE_LIMIT_OTP: "10"
+
+      # Google: prepared but OFF. Enabling it is a reviewed change to this file (DEPLOYMENT_PLAN.md, "Google").
+      GOTRUE_EXTERNAL_GOOGLE_ENABLED: "false"
+      GOTRUE_EXTERNAL_GOOGLE_CLIENT_ID: ${TURNO_GOOGLE_CLIENT_IDS:-}
+      GOTRUE_EXTERNAL_GOOGLE_SECRET: ${TURNO_GOOGLE_SECRET:-}
+
+      # warn: at info GoTrue writes every audit/request event to stdout WITH the user's e-mail (observed in 5F.1C stage 0).
+      # The same audit trail is already kept in auth.audit_log_entries, so stdout keeps only warnings and errors.
+      GOTRUE_LOG_LEVEL: warn
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9999/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    logging: *logging
+
+  turnocontrol-rest:
+    container_name: turnocontrol-rest
+    image: postgrest/postgrest:v14.18@sha256:c7cd7e265a85b05248abf53f4473fcec7e327c282d0bd0cf60f1551996d09fcf
+    restart: unless-stopped
+    depends_on:
+      turnocontrol-db:
+        condition: service_healthy
+    networks: [turnocontrol_internal]
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${TURNO_AUTHENTICATOR_PASSWORD}@turnocontrol-db:5432/postgres
+      # Only `public` is exposed; it contains only sync_push / sync_pull. The `turno` schema is never exposed.
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_EXTRA_SEARCH_PATH: public
+      # No PGRST_DB_ANON_ROLE on purpose: requests without a JWT are refused instead of running as `anon`.
+      PGRST_JWT_SECRET: ${TURNO_JWT_SECRET}
+      PGRST_JWT_AUD: authenticated
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_EXP: ${TURNO_JWT_EXPIRY:-3600}
+      PGRST_OPENAPI_MODE: disabled
+      PGRST_DB_MAX_ROWS: "1000"
+      PGRST_DB_POOL: "10"
+      PGRST_SERVER_PORT: "3000"
+      PGRST_ADMIN_SERVER_PORT: "3001"
+      PGRST_ADMIN_SERVER_HOST: localhost
+      # `error` never logs request lines or bodies.
+      PGRST_LOG_LEVEL: error
+    healthcheck:
+      test: ["CMD", "postgrest", "--ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 128
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    logging: *logging
+
+  turnocontrol-gateway:
+    container_name: turnocontrol-gateway
+    image: caddy:2.11.9-alpine@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+    restart: unless-stopped
+    depends_on:
+      turnocontrol-auth:
+        condition: service_healthy
+      turnocontrol-rest:
+        condition: service_healthy
+    networks: [turnocontrol_internal, turnocontrol_edge]
+    ports:
+      # Loopback only. Never 0.0.0.0. See DEPLOYMENT_PLAN.md, "Caddy".
+      - "127.0.0.1:${TURNO_GATEWAY_PORT:-18080}:8000"
+    volumes:
+      - ./gateway/Caddyfile:/etc/caddy/Caddyfile:ro
+      - turnocontrol_gateway_data:/data
+      - turnocontrol_gateway_config:/config
+    environment:
+      TURNO_ANON_KEY: ${TURNO_ANON_KEY:?set TURNO_ANON_KEY in .env}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    # The official Caddy binary carries the cap_net_bind_service file capability; without it in the bounding set the
+    # exec fails under no-new-privileges, even though port 8000 does not need it.
+    cap_add: [NET_BIND_SERVICE]
+    logging: *logging
+
+networks:
+  turnocontrol_internal:
+    name: turnocontrol_internal
+    internal: true
+  turnocontrol_egress:
+    name: turnocontrol_egress
+  # Fixed name so an approved reverse proxy can join it as an external network (DEPLOYMENT_PLAN.md, "Caddy").
+  turnocontrol_edge:
+    name: turnocontrol_edge
+
+volumes:
+  turnocontrol_pgdata:
+    name: turnocontrol_pgdata
+  turnocontrol_db_config:
+    name: turnocontrol_db_config
+  turnocontrol_gateway_data:
+    name: turnocontrol_gateway_data
+  turnocontrol_gateway_config:
+    name: turnocontrol_gateway_config

@@ -28,7 +28,7 @@ grant all on all tables in schema test to public;
 grant all on all sequences in schema test to public;
 grant execute on all functions in schema test to public;
 
-insert into auth.users values ('00000000-0000-4000-8000-00000000000a', 'ana@example.invalid'), ('00000000-0000-4000-8000-00000000000b', 'bea@example.invalid');
+insert into auth.users (id, email) values ('00000000-0000-4000-8000-00000000000a', 'ana@example.invalid'), ('00000000-0000-4000-8000-00000000000b', 'bea@example.invalid');
 
 -- ---------- Static security properties ----------
 select test.ok((select bool_and(relrowsecurity and relforcerowsecurity) from pg_class c join pg_namespace n on n.oid = c.relnamespace
@@ -40,6 +40,14 @@ select test.ok((select count(*) = 2 from pg_proc p join pg_namespace n on n.oid 
 select test.ok(not has_table_privilege('authenticated', 'turno.records', 'select,insert,update,delete'), 'authenticated sin privilegios sobre turno.records');
 select test.ok(not has_table_privilege('anon', 'turno.records', 'select'), 'anon sin privilegios sobre turno.records');
 select test.ok(not has_function_privilege('anon', 'public.sync_pull(bigint,int)', 'execute'), 'anon no puede ejecutar sync_pull');
+select test.ok(not has_function_privilege('anon', 'public.sync_push(uuid,jsonb)', 'execute'), 'anon no puede ejecutar sync_push');
+select test.ok(not has_function_privilege('service_role', 'public.sync_push(uuid,jsonb)', 'execute')
+  and not has_function_privilege('service_role', 'public.sync_pull(bigint,int)', 'execute'), 'service_role no puede ejecutar las RPC');
+select test.ok((select bool_and(p.proacl is not null) and not exists (select 1 from pg_proc q cross join lateral aclexplode(q.proacl) a
+  where q.oid in ('public.sync_push(uuid,jsonb)'::regprocedure, 'public.sync_pull(bigint,int)'::regprocedure)
+    and a.grantee in (0, 'anon'::regrole::oid, 'service_role'::regrole::oid))
+  from pg_proc p where p.oid in ('public.sync_push(uuid,jsonb)'::regprocedure, 'public.sync_pull(bigint,int)'::regprocedure)),
+  'ACL de las RPC sin PUBLIC, anon ni service_role');
 select test.ok(not pg_has_role('authenticated', 'turno_owner', 'member'), 'authenticated no es miembro de turno_owner');
 select test.ok(not pg_has_role('authenticator', 'turno_owner', 'member') and not pg_has_role('authenticator', 'service_role', 'member'), 'la conexión de la API (authenticator) no puede asumir turno_owner ni service_role');
 

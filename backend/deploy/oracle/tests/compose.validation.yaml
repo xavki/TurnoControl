@@ -1,0 +1,39 @@
+# LOCAL VALIDATION ONLY (phase 5F.1C stage 0). Overlay for compose.yaml that renames every container, network and
+# volume, so a validation run can never collide with, or destroy, a real `turnocontrol` deployment.
+#   docker compose -p turnocontrol-validation-5f1c0 -f compose.yaml -f tests/compose.validation.yaml --env-file <synthetic.env> ...
+# Service names (and therefore the internal DNS names the gateway proxies to) are unchanged.
+services:
+  turnocontrol-db:
+    container_name: turnocontrol-validation-5f1c0-db
+    labels:
+      turnocontrol.validation: "5f1c0"
+  turnocontrol-auth:
+    container_name: turnocontrol-validation-5f1c0-auth
+    labels:
+      turnocontrol.validation: "5f1c0"
+  turnocontrol-rest:
+    container_name: turnocontrol-validation-5f1c0-rest
+    labels:
+      turnocontrol.validation: "5f1c0"
+  turnocontrol-gateway:
+    container_name: turnocontrol-validation-5f1c0-gateway
+    labels:
+      turnocontrol.validation: "5f1c0"
+
+networks:
+  turnocontrol_internal:
+    name: turnocontrol-validation-5f1c0_internal
+  turnocontrol_egress:
+    name: turnocontrol-validation-5f1c0_egress
+  turnocontrol_edge:
+    name: turnocontrol-validation-5f1c0_edge
+
+volumes:
+  turnocontrol_pgdata:
+    name: turnocontrol-validation-5f1c0_pgdata
+  turnocontrol_db_config:
+    name: turnocontrol-validation-5f1c0_db_config
+  turnocontrol_gateway_data:
+    name: turnocontrol-validation-5f1c0_gateway_data
+  turnocontrol_gateway_config:
+    name: turnocontrol-validation-5f1c0_gateway_config

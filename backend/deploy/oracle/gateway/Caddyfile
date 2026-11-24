@@ -1,0 +1,86 @@
+# TurnoControl internal API gateway (phase 5F.1B). NOT the public edge: TLS is terminated by the approved reverse proxy
+# in front of it (DEPLOYMENT_PLAN.md, "Caddy"). Listens on :8000 inside the stack; compose publishes it on 127.0.0.1 only.
+#
+# Deny by default: only the GoTrue endpoints the app needs and the two synchronization RPCs are routed. Everything else
+# (GoTrue /admin, /invite, OAuth /authorize and /callback, every PostgREST table or other function) answers 404.
+#
+# Deviation from the official stack: Supabase ships Envoy (or Kong). This gateway does the same routing and `apikey`
+# check for the legacy anon key, but it does NOT translate the newer sb_publishable_/sb_secret_ keys. TurnoControl
+# uses the legacy anon key only; the service_role key is never accepted here.
+{
+	admin off
+	auto_https off
+	persist_config off
+	# Privacy: Caddy's error log (e.g. a client that disconnects mid-request) records the whole request. Authorization
+	# is redacted by Caddy, but `apikey` and the URI (which on /auth/v1/verify carries the e-mail link token) are not.
+	# Keep only method, protocol, host and client IP (observed and fixed in 5F.1C stage 0).
+	log default {
+		output stderr
+		format filter {
+			wrap json
+			fields {
+				request>headers delete
+				request>uri delete
+				request>remote_port delete
+			}
+		}
+	}
+	servers {
+		# The approved edge proxy reaches us over a private Docker network; trust its X-Forwarded-For only from there.
+		trusted_proxies static private_ranges
+		client_ip_headers X-Forwarded-For
+		# Bounded timeouts so slow or stalled clients cannot hold connections open (slowloris).
+		timeouts {
+			read_header 10s
+			read_body 30s
+			write 60s
+			idle 2m
+		}
+	}
+}
+
+:8000 {
+	request_body {
+		max_size 2MB
+	}
+
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	# E-mail confirmation and recovery links open in a browser and carry no apikey header.
+	handle /auth/v1/verify {
+		uri strip_prefix /auth/v1
+		reverse_proxy turnocontrol-auth:9999 {
+			# Always overwritten: GoTrue rate-limits on this header (GOTRUE_RATE_LIMIT_HEADER).
+			header_up X-Turno-Client-Ip {client_ip}
+		}
+	}
+
+	@auth {
+		path /auth/v1/signup /auth/v1/token /auth/v1/recover /auth/v1/resend /auth/v1/user /auth/v1/logout /auth/v1/settings /auth/v1/health /auth/v1/reauthenticate
+		header apikey {$TURNO_ANON_KEY}
+	}
+	handle @auth {
+		uri strip_prefix /auth/v1
+		reverse_proxy turnocontrol-auth:9999 {
+			header_up X-Turno-Client-Ip {client_ip}
+		}
+	}
+
+	@rpc {
+		method POST
+		path /rest/v1/rpc/sync_push /rest/v1/rpc/sync_pull
+		header apikey {$TURNO_ANON_KEY}
+	}
+	handle @rpc {
+		uri strip_prefix /rest/v1
+		reverse_proxy turnocontrol-rest:3000 {
+			header_up X-Turno-Client-Ip {client_ip}
+		}
+	}
+
+	handle {
+		respond 404
+	}
+}

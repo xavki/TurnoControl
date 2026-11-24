@@ -6,8 +6,10 @@
 | Archivo | Qué es |
 |---|---|
 | `supabase/migrations/20261122000000_turno_sync.sql` | Esquema `turno`, RLS, validación de contenido y RPC `public.sync_push` y `public.sync_pull` |
+| `supabase/migrations/20261124000000_hosting_privileges.sql` | Solo revoca: anula los privilegios por defecto de la imagen de Supabase, que darían EXECUTE de las RPC a `anon` y `service_role` |
 | `supabase/tests/00_local_auth_shim.sql` | **Solo para pruebas:** reproduce los roles de Supabase (`anon`, `authenticated`, `service_role`, `authenticator`) y `auth.uid()`. En Supabase alojado ya existen, y además la pasarela verifica la firma del JWT, algo que esta imitación **no** hace |
-| `supabase/tests/10_sync_security_test.sql` | 72 comprobaciones: RLS, anónimos, sesiones inválidas o caducadas, propietario falsificado, escrituras y borrados directos, idempotencia, conflictos, lápidas, paginación, atomicidad, transacciones interrumpidas, privacidad de las bajas, inyección SQL y borrado de cuenta |
+| `supabase/tests/05_gotrue_auth_uid.sql` | **Solo para pruebas con la imagen de Supabase:** instala el `auth.uid()` que en una pila real crean las migraciones de GoTrue |
+| `supabase/tests/10_sync_security_test.sql` | 75 comprobaciones: RLS, anónimos, sesiones inválidas o caducadas, propietario falsificado, escrituras y borrados directos, idempotencia, conflictos, lápidas, paginación, atomicidad, transacciones interrumpidas, privacidad de las bajas, inyección SQL y borrado de cuenta |
 | `scripts/run-local-tests.sh` | Ejecuta todo y añade una prueba de concurrencia con dos sesiones simultáneas |
 
 ## Ejecutar las pruebas
@@ -26,8 +28,14 @@ Qué hace el script:
 Salida esperada:
 
 ```
-RESULTADO: 72 superadas, 0 fallidas
+RESULTADO: 75 superadas, 0 fallidas
 CONCURRENCIA: superada (una aplicada, una en conflicto, un solo registro)
+```
+
+Con la imagen de Supabase (sin el shim, como `supabase_admin` y aplicando `deploy/oracle/db/hardening`):
+
+```bash
+TURNO_SUPABASE_IMAGE=1 TURNO_PG_IMAGE=supabase/postgres:17.6.1.136 bash backend/scripts/run-local-tests.sh
 ```
 
 Si una ejecución se interrumpe sin limpiar, elimina solo ese contenedor: `docker rm -f -v turnocontrol-sync-test`.
@@ -49,6 +57,9 @@ Si una ejecución se interrumpe sin limpiar, elimina solo ese contenedor: `docke
   - Un cursor negativo se rechaza y el límite queda entre 1 y 1000.
   - La tabla guarda solo la última versión de cada registro: un dispositivo que vuelve tras mucho tiempo recibe el estado actual, no cada versión intermedia.
 - **Validación del contenido:** formato canónico por entidad. Una baja solo puede ser `1|fecha|SICK_LEAVE|MANUAL|`; cualquier dato adicional se rechaza.
+
+## Despliegue autoalojado
+La preparación para un VPS propio (Docker Compose, sin desplegar) está en [`deploy/oracle/`](deploy/oracle/README.md).
 
 ## Antes de un despliegue real
 Requiere aprobación expresa y otra fase:

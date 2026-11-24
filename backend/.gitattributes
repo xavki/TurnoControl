@@ -1,0 +1,7 @@
+# Backend files run on Linux (containers, the deployment server): always LF, whatever core.autocrlf says.
+*.sh        text eol=lf
+*.sql       text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+Caddyfile   text eol=lf
+*.example   text eol=lf
