@@ -16,6 +16,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.turnocontrol.data.accounts.StorageBusyException
 import com.turnocontrol.data.accounts.SwitchOutcome
+import com.turnocontrol.data.auth.AuthCoordinator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -80,8 +81,18 @@ class AccountViewModel internal constructor(
     /** Future: switches storage to the guest namespace. Null while no account system is active. */
     private val signOutAction: (suspend () -> SwitchOutcome)?,
 ) : ViewModel() {
-    /** Production: no provider yet, so always "Sin cuenta" with the sign-in actions unavailable. */
-    @Inject constructor() : this(AccountUiState.Guest, providersAvailable = false, signOutAction = null)
+    /**
+     * Production (phase 5E.1): the real AuthCoordinator is wired end-to-end (sign-out really switches storage back to
+     * guest, restoreOnStart() really re-derives the state from whatever is on disk), but `providersAvailable` stays
+     * false because no Google/email provider exists yet (AuthModule's AuthCoordinator can never actually reach
+     * Authenticated in production: its AuthProvider always fails). This is why this can keep saying "Sin cuenta" by
+     * construction today, while already being the exact path a future real provider plugs into without any further
+     * ViewModel or UI change.
+     */
+    @Inject constructor(coordinator: AuthCoordinator) : this(AccountUiState.Guest, providersAvailable = false, signOutAction = coordinator::signOut) {
+        viewModelScope.launch { coordinator.restoreOnStart() }
+        viewModelScope.launch { coordinator.state.collect { account -> mutable.update { it.copy(account = account) } } }
+    }
 
     private val mutable = MutableStateFlow(AccountScreenState(initial, providersAvailable))
     val state = mutable.asStateFlow()

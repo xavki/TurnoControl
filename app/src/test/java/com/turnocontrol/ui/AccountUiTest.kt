@@ -12,8 +12,13 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.turnocontrol.data.*
 import com.turnocontrol.data.accounts.*
+import com.turnocontrol.data.auth.AuthCoordinator
+import com.turnocontrol.data.auth.EncryptedSessionVault
+import com.turnocontrol.data.auth.SessionVaultTest
 import com.turnocontrol.domain.*
 import com.turnocontrol.domain.auth.AccountId
+import com.turnocontrol.domain.auth.AuthManager
+import com.turnocontrol.domain.auth.FakeAuthProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -28,6 +33,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.io.File
+import java.time.Instant
 import java.time.LocalDate
 
 /** Account interface with synthetic states (JVM/Robolectric rendering, not a physical device check). */
@@ -62,7 +68,18 @@ class AccountUiTest {
     }
 
     @Test fun productionViewModelIsAlwaysAGuestWithoutWorkingSignIn() = runTest {
-        val production = AccountViewModel().also { store.put("prod", it) }
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val gate = OperationGate()
+        val layout = StorageLayout(File(temporary.root, "files"))
+        val storageCoordinator = AccountStorageCoordinator(layout, ActiveNamespaceStore(File(temporary.root, "nb")), SwitchJournal(File(temporary.root, "nb")), gate,
+            { location, guard -> StorageDatabases.build(context, location, guard) { it.allowMainThreadQueries() } })
+        val holder = StorageSessionHolder(context, gate, storageCoordinator)
+        val vault = EncryptedSessionVault(File(temporary.root, "sessions"), SessionVaultTest.JvmGcmCipher())
+        val manager = AuthManager(FakeAuthProvider { Instant.now() }, vault)
+        val coordinator = AuthCoordinator(manager, vault, holder)
+        // This is the real production wiring (AccountViewModel's @Inject constructor(AuthCoordinator)), over synthetic
+        // storage: no Google/email provider is configured anywhere in this phase, so it stays "Sin cuenta" regardless.
+        val production = AccountViewModel(coordinator).also { store.put("prod", it) }
         assertEquals(AccountScreenState(AccountUiState.Guest, providersAvailable = false), production.state.value)
         production.signOut() // Nothing to sign out of: no effect.
         assertEquals(AccountUiState.Guest, production.state.value.account)
