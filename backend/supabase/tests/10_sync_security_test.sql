@@ -35,8 +35,9 @@ select test.ok((select bool_and(relrowsecurity and relforcerowsecurity) from pg_
   where n.nspname = 'turno' and c.relkind = 'r'), 'RLS activada y forzada en todas las tablas de turno');
 select test.ok((select count(*) = 4 from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'turno' and c.relkind = 'r'), 'cuatro tablas en turno');
 select test.ok((select bool_and(proconfig @> array['search_path=""'] or proconfig @> array['search_path=']) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where p.prosecdef and n.nspname in ('public','turno')), 'toda función SECURITY DEFINER fija search_path vacío');
-select test.ok((select count(*) = 2 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where p.prosecdef and n.nspname in ('public','turno')), 'solo dos funciones SECURITY DEFINER (sync_push y sync_pull)');
+  where p.prosecdef and n.nspname in ('public','turno','turno_ops')), 'toda función SECURITY DEFINER fija search_path vacío');
+select test.ok((select array_agg(p.proname::text order by p.proname) = array['account_exists','delete_my_account','erase_account','session_valid','sync_pull','sync_push'] from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where p.prosecdef and n.nspname in ('public','turno','turno_ops')), 'funciones SECURITY DEFINER: exactamente las 3 RPC y los 3 auxiliares de turno_ops');
 select test.ok(not has_table_privilege('authenticated', 'turno.records', 'select,insert,update,delete'), 'authenticated sin privilegios sobre turno.records');
 select test.ok(not has_table_privilege('anon', 'turno.records', 'select'), 'anon sin privilegios sobre turno.records');
 select test.ok(not has_function_privilege('anon', 'public.sync_pull(bigint,int)', 'execute'), 'anon no puede ejecutar sync_pull');

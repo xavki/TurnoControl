@@ -4,7 +4,7 @@
 #   scripts/migrate.sh --apply         # applies pending files (requires a fresh verified backup, see below)
 #   scripts/migrate.sh --apply --first-install   # empty database only (no `turno` schema yet): no backup required
 #
-# Order: db/hardening/*.sql, then backend/supabase/migrations/*.sql, by file name. Each file runs in ONE transaction
+# Order: db/hardening/*.sql, then backend/supabase/migrations/*.sql, by file name; then db/privileges/*.sql (re-runnable). Each file runs in ONE transaction
 # and is recorded (name + sha256) in turno_deploy.applied_files. A recorded file whose content changed stops the run:
 # migrations are append-only, never edited or re-run. Nothing here drops or recreates a schema.
 set -euo pipefail
@@ -51,5 +51,9 @@ for f in "$DEPLOY_DIR"/db/hardening/*.sql "$BACKEND_DIR"/supabase/migrations/*.s
   { cat "$f"; printf "\ninsert into turno_deploy.applied_files(file_name, sha256) values ('%s', '%s');\n" "$name" "$sum"; } \
     | db_psql --single-transaction -f -
 done
+if [ "$apply" = 1 ]; then
+  # Re-runnable privilege baseline (not ledgered): applied after EVERY run, also when nothing was pending.
+  for f in "$DEPLOY_DIR"/db/privileges/*.sql; do log "aplicando privilegios $(basename "$f")"; db_psql --single-transaction -f - < "$f"; done
+fi
 [ "$apply" = 0 ] && echo "Simulación: $pending pendientes. Nada aplicado (usa --apply)." || log "migración terminada ($pending aplicados)"
 [ "$apply" = 1 ] && log "siguiente paso: tests/sql/verify_deployment.sql" || true

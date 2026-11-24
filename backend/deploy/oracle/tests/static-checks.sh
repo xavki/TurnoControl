@@ -5,6 +5,7 @@
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 REPO=$(cd "$HERE/../../.." && pwd)
+BACKEND="$REPO/backend"
 for c in docker bash grep git; do command -v "$c" >/dev/null || { echo "falta $c" >&2; exit 2; }; done
 # python3 on Linux; plain `python` on Windows (the Store alias "python3" only prints an install hint).
 PY=python3; "$PY" -c "" 2>/dev/null || PY=python; "$PY" -c "" 2>/dev/null || { echo "falta python" >&2; exit 2; }
@@ -99,7 +100,12 @@ check "los borrados de copias usan patrones explícitos" 'grep -q "turnocontrol-
 check "gateway con tiempos de espera acotados (slowloris)" 'grep -q "read_header" "$HERE/gateway/Caddyfile" && grep -q "read_body" "$HERE/gateway/Caddyfile"'
 check "gateway: el registro de errores no guarda cabeceras ni URI" 'grep -q "request>headers delete" "$HERE/gateway/Caddyfile" && grep -q "request>uri delete" "$HERE/gateway/Caddyfile"'
 check "la prueba de firma alterada no toca el último carácter" '! grep -q "\${A%?}x" "$HERE/tests/api-security-test.sh"'
-check "el simulacro reaplica los privilegios tras restaurar" 'grep -q "20261124000000_hosting_privileges.sql" "$HERE/scripts/restore-drill.sh"'
+check "el simulacro reaplica la base de privilegios tras restaurar" 'grep -q "db/privileges" "$HERE/scripts/restore-drill.sh"'
+check "migrate.sh aplica la base de privilegios tras cada ejecución" 'grep -q "db/privileges" "$HERE/scripts/migrate.sh"'
+check "la base de privilegios solo revoca, salvo EXECUTE a authenticated de la lista permitida" '! grep -v "^\s*--" "$HERE/db/privileges/90_rpc_privileges.sql" | grep -Eiq "grant [a-z ,%]+ to (anon|service_role|public|authenticator)" && grep -q "delete_my_account" "$HERE/db/privileges/90_rpc_privileges.sql"'
+check "gateway: delete_my_account solo por POST y con apikey (mismo bloque que las RPC de sincronización)" 'grep -A3 "@rpc {" "$HERE/gateway/Caddyfile" | grep -q "method POST" && grep -A3 "@rpc {" "$HERE/gateway/Caddyfile" | grep -q "/rest/v1/rpc/delete_my_account"'
+check "intervalo de reutilización de refresh tokens por defecto 0" 'grep -q "REFRESH_TOKEN_REUSE_INTERVAL:-0}" "$HERE/compose.yaml"'
+check "la migración de borrado no da BYPASSRLS ni privilegios sobre auth a turno_owner" '! grep -Eiq "(grant [a-z ,()_]+ on auth\.[a-z_]+ to turno_owner|alter role turno_owner)" "$BACKEND/supabase/migrations/20261125000000_account_deletion.sql"'
 check "el simulacro comprueba el descifrado antes de crear nada" 'grep -q "no descifra la copia" "$HERE/scripts/restore-drill.sh"'
 check "override de validación: ningún nombre de producción" '! grep -nE "^\s+(container_name|name): turnocontrol(-db|-auth|-rest|-gateway|_internal|_egress|_edge|_pgdata|_db_config|_gateway_data|_gateway_config)\s*$" "$HERE/tests/compose.validation.yaml" && [ "$(grep -cE "^\s+(container_name|name): turnocontrol-validation-5f1c0" "$HERE/tests/compose.validation.yaml")" = 11 ]'
 check "override de staging: ningún nombre de producción" '[ "$(grep -cE "^\s+(container_name|name): turnocontrol-staging" "$HERE/compose.staging.yaml")" = 11 ]'

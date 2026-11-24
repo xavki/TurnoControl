@@ -1,7 +1,8 @@
 # TurnoControl internal API gateway (phase 5F.1B). NOT the public edge: TLS is terminated by the approved reverse proxy
 # in front of it (DEPLOYMENT_PLAN.md, "Caddy"). Listens on :8000 inside the stack; compose publishes it on 127.0.0.1 only.
 #
-# Deny by default: only the GoTrue endpoints the app needs and the two synchronization RPCs are routed. Everything else
+# Deny by default: only the GoTrue endpoints the app needs, the two synchronization RPCs and the account-deletion RPC
+# (POST only) are routed. Everything else
 # (GoTrue /admin, /invite, OAuth /authorize and /callback, every PostgREST table or other function) answers 404.
 #
 # Deviation from the official stack: Supabase ships Envoy (or Kong). This gateway does the same routing and `apikey`
@@ -70,7 +71,7 @@
 
 	@rpc {
 		method POST
-		path /rest/v1/rpc/sync_push /rest/v1/rpc/sync_pull
+		path /rest/v1/rpc/sync_push /rest/v1/rpc/sync_pull /rest/v1/rpc/delete_my_account
 		header apikey {$TURNO_ANON_KEY}
 	}
 	handle @rpc {

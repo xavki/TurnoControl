@@ -114,7 +114,10 @@ services:
 
       # Sessions: rotating refresh tokens; a reused (stolen) refresh token revokes the session family.
       GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED: "true"
-      GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL: "10"
+      # 0 (5F.1D): with a non-zero interval the latest token of a revoked family keeps working for that many seconds
+      # after a theft signal. Lost responses, crashes mid-refresh and concurrent refreshes stay recoverable at 0 because
+      # GoTrue answers a retry of the active token's PARENT with the active token (tests/refresh-token-policy-test.sh).
+      GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL: ${TURNO_REFRESH_TOKEN_REUSE_INTERVAL:-0}
       GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION: "true"
       GOTRUE_PASSWORD_MIN_LENGTH: ${TURNO_PASSWORD_MIN_LENGTH:-10}
 
@@ -127,7 +130,7 @@ services:
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
       GOTRUE_MAILER_AUTOCONFIRM: ${TURNO_MAILER_AUTOCONFIRM:-false}
       GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED: "true"
-      GOTRUE_MAILER_OTP_EXP: "3600"
+      GOTRUE_MAILER_OTP_EXP: ${TURNO_MAILER_OTP_EXP:-3600}
       GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
       GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
       GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify

@@ -44,7 +44,7 @@ log "errores de pg_restore: $errors (los objetos internos de la imagen pueden ge
 # image's default privileges grant EXECUTE on them to anon/service_role again (pg_dump stores ACLs relative to the
 # built-in default, so the earlier revocation is not carried by the dump). Re-apply the idempotent privilege files.
 log "reaplicando endurecimiento y privilegios tras restaurar"
-for h in "$DEPLOY_DIR"/db/hardening/*.sql "$BACKEND_DIR"/supabase/migrations/20261124000000_hosting_privileges.sql; do
+for h in "$DEPLOY_DIR"/db/hardening/*.sql "$DEPLOY_DIR"/db/privileges/*.sql; do
   dpsql -v ON_ERROR_STOP=1 < "$h" 2>/dev/null
 done
 
