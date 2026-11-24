@@ -27,7 +27,7 @@ alter default privileges in schema public grant all on sequences to anon, authen
 create table auth.sessions (id uuid primary key, user_id uuid not null references auth.users(id) on delete cascade, not_after timestamptz);
 create table auth.refresh_tokens (id bigserial primary key, user_id varchar(255), session_id uuid references auth.sessions(id) on delete cascade);
 create table auth.flow_state (id uuid primary key, user_id uuid);
-create table auth.audit_log_entries (id uuid primary key, payload json);
+create table auth.audit_log_entries (id uuid primary key, payload json, created_at timestamptz default now());
 -- GoTrue enables row-level security WITHOUT policies on its auth tables; reproduce it so the tests catch any code that
 -- reads auth.* through a role that does not bypass RLS (found in 5F.1D against the real stack).
 alter table auth.users enable row level security;

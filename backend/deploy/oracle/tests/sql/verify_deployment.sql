@@ -20,6 +20,8 @@ union all select 'ninguna función pública de turno_owner ejecutable por PUBLIC
 union all select 'auxiliares de turno_ops: solo turno_owner los ejecuta', not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace, unnest(array['anon','authenticated','service_role','authenticator']) r
   where n.nspname = 'turno_ops' and has_function_privilege(r, p.oid, 'execute'))
 union all select 'turno_auth_ops: NOLOGIN, sin superusuario, solo turno_owner ejecuta sus funciones', (select not rolcanlogin and not rolsuper and rolbypassrls from pg_roles where rolname = 'turno_auth_ops') and not pg_has_role('authenticator', 'turno_auth_ops', 'member') and not pg_has_role('authenticated', 'turno_auth_ops', 'member')
+union all select 'purga de retención: ningún rol de la API ni turno_owner la ejecuta', not exists (select 1 from unnest(array['anon','authenticated','service_role','authenticator','turno_owner']) r
+  where has_function_privilege(r, 'turno_ops.purge_retention(int,boolean)', 'execute'))
 union all select 'turno_ops no accesible para la API', not has_schema_privilege('anon', 'turno_ops', 'usage') and not has_schema_privilege('authenticated', 'turno_ops', 'usage') and not has_schema_privilege('service_role', 'turno_ops', 'usage')
 union all select 'auth.uid() lee request.jwt.claims (GoTrue migrado)', exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'auth' and p.proname = 'uid' and pg_get_functiondef(p.oid) like '%request.jwt.claims%')
 union all select 'claves foráneas a auth.users con borrado en cascada', (select count(*) = 4 from pg_constraint where contype = 'f' and confrelid = 'auth.users'::regclass and confdeltype = 'c' and connamespace = 'turno'::regnamespace);

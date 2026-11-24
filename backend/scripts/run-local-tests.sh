@@ -38,6 +38,7 @@ for migration in "$HERE"/supabase/migrations/*.sql; do psql < "$migration"; done
 for privileges in "$HERE"/deploy/oracle/db/privileges/*.sql; do psql < "$privileges"; done
 psql < "$HERE/supabase/tests/10_sync_security_test.sql"
 psql < "$HERE/supabase/tests/20_account_deletion_test.sql"
+psql < "$HERE/supabase/tests/30_retention_test.sql"
 
 # Concurrency: two sessions push the same record from the same base at the same time. The per-account lock must make
 # exactly one succeed and the other report a conflict (never two versions from one base).

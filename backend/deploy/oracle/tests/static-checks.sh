@@ -104,6 +104,8 @@ check "el simulacro reaplica la base de privilegios tras restaurar" 'grep -q "db
 check "migrate.sh aplica la base de privilegios tras cada ejecución" 'grep -q "db/privileges" "$HERE/scripts/migrate.sh"'
 check "la base de privilegios solo revoca, salvo EXECUTE a authenticated de la lista permitida" '! grep -v "^\s*--" "$HERE/db/privileges/90_rpc_privileges.sql" | grep -Eiq "grant [a-z ,%]+ to (anon|service_role|public|authenticator)" && grep -q "delete_my_account" "$HERE/db/privileges/90_rpc_privileges.sql"'
 check "gateway: delete_my_account solo por POST y con apikey (mismo bloque que las RPC de sincronización)" 'grep -A3 "@rpc {" "$HERE/gateway/Caddyfile" | grep -q "method POST" && grep -A3 "@rpc {" "$HERE/gateway/Caddyfile" | grep -q "/rest/v1/rpc/delete_my_account"'
+check "retention.sh: simulación por defecto y copia previa obligatoria para --apply" 'grep -q "^apply=0" "$HERE/scripts/retention.sh" && grep -q "no hay una copia de menos de 2 horas" "$HERE/scripts/retention.sh"'
+check "la purga de retención nunca borra de turno.records ni de user_state" '! grep -Eiq "delete from turno\.(records|user_state)" "$BACKEND/supabase/migrations/20261126000000_retention.sql"'
 check "intervalo de reutilización de refresh tokens por defecto 0" 'grep -q "REFRESH_TOKEN_REUSE_INTERVAL:-0}" "$HERE/compose.yaml"'
 check "la migración de borrado no da BYPASSRLS ni privilegios sobre auth a turno_owner" '! grep -Eiq "(grant [a-z ,()_]+ on auth\.[a-z_]+ to turno_owner|alter role turno_owner)" "$BACKEND/supabase/migrations/20261125000000_account_deletion.sql"'
 check "el simulacro comprueba el descifrado antes de crear nada" 'grep -q "no descifra la copia" "$HERE/scripts/restore-drill.sh"'
