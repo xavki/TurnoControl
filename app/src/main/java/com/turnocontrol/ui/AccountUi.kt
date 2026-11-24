@@ -71,8 +71,12 @@ fun AccountUiState.presentation(providersAvailable: Boolean): AccountPresentatio
         providersAvailable, PROVIDERS_UNAVAILABLE.takeUnless { providersAvailable }, showContinueWithoutAccount = false, showSignOut = true, details = emptyList())
 }
 
+/**
+ * [restartRequired] is a one-shot event: storage moved to another namespace, so every Activity-scoped ViewModel still
+ * holds the previous scope's repositories (now closed). The Activity must restart the task (AccountSwitchRestart).
+ */
 data class AccountScreenState(val account: AccountUiState = AccountUiState.Guest, val providersAvailable: Boolean = false,
-    val busy: Boolean = false, val message: String? = null)
+    val busy: Boolean = false, val message: String? = null, val restartRequired: Boolean = false)
 
 @HiltViewModel
 class AccountViewModel internal constructor(
@@ -98,6 +102,7 @@ class AccountViewModel internal constructor(
     val state = mutable.asStateFlow()
 
     fun dismissMessage() = mutable.update { it.copy(message = null) }
+    fun consumeRestart() = mutable.update { it.copy(restartRequired = false) }
 
     /** Sign-out keeps the account's data on disk and returns to the guest data; a refusal changes nothing. */
     fun signOut() {
@@ -107,7 +112,7 @@ class AccountViewModel internal constructor(
         viewModelScope.launch {
             val message = try {
                 when (val outcome = action()) {
-                    is SwitchOutcome.Switched -> { mutable.update { it.copy(account = AccountUiState.Guest) }; "Has cerrado la sesión. Los datos de la cuenta siguen guardados en este dispositivo." }
+                    is SwitchOutcome.Switched -> { mutable.update { it.copy(account = AccountUiState.Guest, restartRequired = true) }; "Has cerrado la sesión. Los datos de la cuenta siguen guardados en este dispositivo." }
                     is SwitchOutcome.Busy -> "${AccountProblem.SWITCH_BLOCKED.message} ${outcome.reason}"
                     is SwitchOutcome.Failed -> AccountProblem.STORAGE.message
                 }

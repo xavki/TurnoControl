@@ -138,6 +138,8 @@ class AccountUiTest {
         broken.signOut()
         assertEquals(AccountProblem.STORAGE.message, broken.state.first { it.message != null }.message)
         assertEquals(authenticated, broken.state.value.account)
+        // Storage did not move in any of these cases: no screen may be rebuilt.
+        listOf(busy, pending, broken).forEach { assertFalse(it.state.value.restartRequired) }
     }
 
     @Test fun signOutThroughTheCoordinatorReturnsToGuestDataWithoutDeletingTheAccount() = runTest {
@@ -158,6 +160,10 @@ class AccountUiTest {
             vm.signOut()
             val after = vm.state.first { !it.busy && it.message != null }
             assertEquals(AccountUiState.Guest, after.account)
+            // The storage moved: the Activity must rebuild every screen on the guest scope, exactly once.
+            assertTrue(after.restartRequired)
+            vm.consumeRestart()
+            assertFalse(vm.state.value.restartRequired)
             assertEquals(listOf("2026-12-01"), ScheduleRepository(coordinator.current!!.database).snapshot().map { it.day.date }) // A's calendar not visible.
             assertTrue(context.databaseFile(layout.locate(ns)).exists()) // Not deleted.
         } finally {

@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.*
+import com.turnocontrol.data.accounts.AccountSwitchRestart
 import com.turnocontrol.ui.*
 import dagger.hilt.android.AndroidEntryPoint
 
@@ -45,6 +46,12 @@ class MainActivity : ComponentActivity() {
                         // A completed restore replaced every row: reload the configuration draft and drop calendar/OCR drafts.
                         LaunchedEffect(backup.dataReplaced) {
                             if (backup.dataReplaced) { model.reload(); calendarModel.resetAfterRestore(); reviewModel.clear(); importModel.clear(); backupModel.consumeDataReplaced() }
+                        }
+                        // After a confirmed storage switch the calendar, summary and settings ViewModels still point at the
+                        // previous (closed) database: start a fresh task so every screen is rebuilt on the new scope.
+                        val account by accountModel.state.collectAsStateWithLifecycle()
+                        LaunchedEffect(account.restartRequired) {
+                            if (account.restartRequired) { accountModel.consumeRestart(); AccountSwitchRestart.restart(this@MainActivity) }
                         }
                         TurnoApp(model, importModel, reviewModel, calendarModel, summaryModel, backupModel, accountModel)
                     }
