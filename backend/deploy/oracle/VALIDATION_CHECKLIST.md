@@ -106,3 +106,22 @@ Proyecto `turnocontrol-staging` (`compose.staging.yaml`), gateway solo en `127.0
 | Parada y arranque controlados de toda la pila: datos idénticos | ✔ |
 | Alta y autoconfirmación cerradas al terminar (`422 signup_disabled`) | ✔ |
 | Contenedores existentes intactos (ID, inicio, 0 reinicios) | ✔ |
+
+## Fase 5F.1D, cierre del backend (local, x86_64; regresión final única desde cero)
+Ver `ACCOUNT_LIFECYCLE.md`. **No desplegado** en el staging de Oracle.
+
+| Comprobación | Resultado |
+|---|---|
+| `static-checks.sh` | ✔ 146/146 |
+| SQL en `postgres:16` y en `supabase/postgres:17.6.1.136`: sincronización 75, borrado 33 y retención 28, más concurrencia y 4 órdenes de borrado frente a push | ✔ en los dos |
+| Migraciones: 2 nuevas (borrado y retención) más la base de privilegios re-ejecutable; `verify_deployment` 20/20 | ✔ |
+| `refresh-token-policy-test.sh` con intervalos 0, 2 y 10 s | ✔ 26/27/27 → intervalo 0 por defecto |
+| `account-deletion-test.sh` con GoTrue real, incluido el barrido de todas las columnas de `auth`, `turno` y `turno_ops` | ✔ 27/27, 0 restos |
+| Regresión: HTTP 60/60, resiliencia 9/9, integridad 42/42, sesión 8/8 y registros sin datos sensibles | ✔ |
+| Simulacro de restauración con la base de privilegios y las tablas nuevas | ✔ 25/25, recuentos idénticos |
+| `backup-destination-test.sh` (almacenamiento falso) | ✔ 34/34 |
+| Adaptador rclone con la imagen `rclone/rclone` v1.76.0 y un remoto `:local:` | ✔ marcador, subida, status y fetch (la subida interrumpida solo se probó con `dir`) |
+| `email-auth-test.sh` con Mailpit | ✔ 41/41; tope global 1/1 |
+| Propuesta HTTPS validada con Caddy v2.11.4 (mismo digest que el proxy existente) y v2.11.9 | ✔ |
+| ARM64 de lo nuevo | ☐ no ejecutado (necesita desplegar en el staging, con un manifiesto nuevo) |
+| Correo real, dominio, bucket real, HTTPS público | ☐ decisiones del propietario |

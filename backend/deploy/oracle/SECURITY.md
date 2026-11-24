@@ -26,6 +26,7 @@
   - Los tokens de acceso duran 1 h.
   - Los refresh tokens rotan, y si se reutiliza uno se revoca toda su familia.
   - Cambiar la contraseña exige reautenticarse.
+- **Intervalo de reutilización 0 (5F.1D):** la ventana descrita aquí debajo queda cerrada por defecto. Los reintentos legítimos siguen funcionando (ver `ACCOUNT_LIFECYCLE.md` §1).
 - **Reutilización de un refresh token (verificado en staging ARM64, GoTrue v2.198.0):**
   - Reutilizar un token ya rotado se rechaza (`refresh_token_already_used`) y GoTrue revoca todos los refresh tokens de la sesión.
   - Pero `RevokeTokenFamily` pone `updated_at = now()`, y un token revocado se vuelve a aceptar dentro del intervalo de reutilización (`GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL`, 10 s) contado desde ese momento.
@@ -58,13 +59,24 @@
   - **`TURNO_JWT_SECRET`:** hay que generar un secreto nuevo y una `TURNO_ANON_KEY` nueva, y recrear `auth`, `rest` y el gateway. **Todas las sesiones se cierran**, y la app necesita la nueva clave anon.
   - **Clave de copias `age`:** nueva pareja de claves. La clave privada antigua se conserva mientras existan copias cifradas con ella.
 
-## 4. Operaciones de administración
+## 4. Borrado de cuenta, retención y GoTrue
+- **Borrado de cuenta y retención:** ver `ACCOUNT_LIFECYCLE.md`.
+- **GoTrue activa RLS sin políticas en `auth.*`.** Cualquier código que lea `auth` sin un rol que se salte el RLS solo verá filas vacías. El acceso pasa por `turno_auth_ops`, con privilegios de columna, NOLOGIN y funciones de propósito fijo. Las pruebas SQL lo reproducen.
+- **SMTP:** GoTrue se niega a enviar credenciales SMTP por una conexión sin cifrar («unencrypted connection»). En producción: STARTTLS en el puerto 587.
+- **Límites observados:**
+  - un correo por usuario por minuto (429);
+  - un tope global de correos por hora (configurable, 10 por defecto);
+  - `/verify` con un máximo de 30 por IP cada 5 minutos (429).
+  - El tope global vive en la memoria de GoTrue y se reinicia cuando se recrea.
+- **Pendiente para cuando haya alta pública:** decidir captcha o solo límites.
+
+## 5. Operaciones de administración
 - La administración se hace solo por SSH al servidor y con `docker exec … psql -U supabase_admin` (socket local), o contra GoTrue desde dentro de la red interna.
 - **Borrar una cuenta**, por ejemplo una cuenta sintética de prueba: se genera un JWT temporal con `role=service_role`, firmado con `TURNO_JWT_SECRET` y con una caducidad de 5 min, y se llama a `DELETE /admin/users/<uuid>` de GoTrue **desde la red interna, no a través del gateway**, que bloquea `/admin`.
   - Las claves foráneas `on delete cascade` eliminan los datos de sincronización.
   - Las copias cifradas caducan según la retención (ver `BACKUP_PLAN.md`).
 
-## 5. Registros
+## 6. Registros
 - **PostgreSQL:** `log_statement=none`, `log_min_error_statement=panic` y `log_min_duration_statement=-1`. Así no se registra ningún texto SQL, y por tanto ningún contenido sincronizado.
 - **PostgREST:** `PGRST_LOG_LEVEL=error`, sin líneas de petición.
 - **Gateway:** sin registro de accesos. El registro de errores (por ejemplo, ante una desconexión del cliente) guardaba toda la petición: la cabecera `apikey` y la URI, que en `/auth/v1/verify` contiene el token del enlace del correo. Caddy solo redacta `Authorization`. Un filtro en el `Caddyfile` deja ahora solo el método, el protocolo, el host y la IP del cliente (corregido en 5F.1C etapa 0).
@@ -74,7 +86,7 @@
 - **Lo que nunca debe aparecer en un registro, informe o captura:** contraseñas, `TURNO_JWT_SECRET`, tokens de acceso o de refresco, claves privadas, el contenido de `.env`, cuerpos de petición o contenido sincronizado.
 - **Para revisar registros** usa `docker logs --tail 200 turnocontrol-auth` y similares. No copies en ningún sitio líneas con cabeceras `Authorization`.
 
-## 6. Privacidad y protección de datos
+## 7. Privacidad y protección de datos
 - **Qué se sincroniza de una baja:** solo `1|fecha|SICK_LEAVE|MANUAL|`. La validación SQL rechaza cualquier dato adicional (diagnóstico, motivo, síntomas, médico, documentos o notas) y lo cubren pruebas.
 - **Aunque no haya detalles médicos, una fecha marcada como baja puede ser un dato relativo a la salud** (art. 9 del RGPD). No basta con omitir el diagnóstico para afirmar que se cumple la normativa. **Antes de subir datos reales** hacen falta:
   1. base jurídica: probablemente consentimiento explícito para la categoría especial;
@@ -85,7 +97,7 @@
   6. revisión de un profesional del derecho.
 - El veredicto de privacidad de la app sigue siendo **PRIVACY NOT VERIFIED** (ML Kit). Este backend no lo cambia, y el permiso `INTERNET` de producción sigue desactivado.
 
-## 7. Riesgos residuales
+## 8. Riesgos residuales
 - Un secreto JWT filtrado permite crear tokens de cualquier usuario. Para mitigarlo: el secreto solo existe en el servidor, las sesiones son cortas, se rota si hay sospecha y el endurecimiento impide escalar a superusuario.
 - Un acceso de administrador al servidor equivale a acceso a todos los datos. Para mitigarlo: SSH solo con clave, sin contraseña, y el menor número posible de personas con acceso.
 - Las imágenes de terceros pueden tener vulnerabilidades. Para mitigarlo: versiones fijadas con digest y actualizaciones controladas (`MONITORING.md`).

@@ -1,0 +1,22 @@
+# PROPOSAL — NOT applied. Option B of DEPLOYMENT_PLAN.md §4: a dedicated TurnoControl edge proxy. Shown for comparison:
+# it needs a NEW public port (security list + host firewall changes) because 80/443 belong to the existing proxy, and a
+# DNS-01 ACME challenge (custom Caddy build with the DNS provider's module and an API token), since HTTP-01 needs port 80
+# and TLS-ALPN-01 needs port 443. App Links would still not work (they require 443). Not recommended.
+services:
+  turnocontrol-edge:
+    image: <caddy-build-with-dns-module>@sha256:<digest>
+    ports:
+      - "<nuevo-puerto-público>:443"
+    networks: [turnocontrol_edge]
+    volumes:
+      - ./option-b.Caddyfile:/etc/caddy/Caddyfile:ro
+      - turnocontrol_edge_data:/data
+    environment:
+      TURNO_PUBLIC_HOST: ${TURNO_PUBLIC_HOST:?}
+      DNS_API_TOKEN: ${TURNO_DNS_API_TOKEN:?}
+networks:
+  turnocontrol_edge:
+    external: true
+    name: turnocontrol_edge
+volumes:
+  turnocontrol_edge_data:

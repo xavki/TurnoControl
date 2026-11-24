@@ -14,6 +14,8 @@ Sin agentes ni infraestructura adicional. Todo se hace con `scripts/healthcheck.
 | Memoria | `free`, memoria disponible | Más de 2 GB |
 | Volumen de datos | `docker system df -v` | Solo informativo |
 | Copias | La copia local más reciente | Menos de 26 h |
+| Copia externa | `scripts/backup-remote.sh status`: la más reciente se descarga y se verifica | Menos de 26 h e íntegra |
+| Retención | `turno_ops.retention_runs` (solo recuentos), cuando se programe | Una ejecución en el periodo previsto |
 | Certificado | `openssl s_client` contra `TURNO_PUBLIC_TLS_HOST`, cuando haya HTTPS | Más de 14 días |
 
 ## Revisar registros sin exponer datos

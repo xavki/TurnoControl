@@ -109,12 +109,15 @@ check "la purga de retención nunca borra de turno.records ni de user_state" '! 
 check "intervalo de reutilización de refresh tokens por defecto 0" 'grep -q "REFRESH_TOKEN_REUSE_INTERVAL:-0}" "$HERE/compose.yaml"'
 check "la migración de borrado no da BYPASSRLS ni privilegios sobre auth a turno_owner" '! grep -Eiq "(grant [a-z ,()_]+ on auth\.[a-z_]+ to turno_owner|alter role turno_owner)" "$BACKEND/supabase/migrations/20261125000000_account_deletion.sql"'
 check "el simulacro comprueba el descifrado antes de crear nada" 'grep -q "no descifra la copia" "$HERE/scripts/restore-drill.sh"'
-check "override de validación: ningún nombre de producción" '! grep -nE "^\s+(container_name|name): turnocontrol(-db|-auth|-rest|-gateway|_internal|_egress|_edge|_pgdata|_db_config|_gateway_data|_gateway_config)\s*$" "$HERE/tests/compose.validation.yaml" && [ "$(grep -cE "^\s+(container_name|name): turnocontrol-validation-5f1c0" "$HERE/tests/compose.validation.yaml")" = 11 ]'
+check "override de validación: ningún nombre de producción" '! grep -nE "^\s+(container_name|name): turnocontrol(-db|-auth|-rest|-gateway|_internal|_egress|_edge|_pgdata|_db_config|_gateway_data|_gateway_config)\s*$" "$HERE/tests/compose.validation.yaml" && [ "$(grep -cE "^\s+(container_name|name): turnocontrol-validation-5f1c0" "$HERE/tests/compose.validation.yaml")" = 12 ]'
 check "override de staging: ningún nombre de producción" '[ "$(grep -cE "^\s+(container_name|name): turnocontrol-staging" "$HERE/compose.staging.yaml")" = 11 ]'
 check "la prueba de sesión espera al intervalo de reutilización antes de comprobar la familia" 'grep -q "pasado el intervalo, toda la familia queda revocada" "$HERE/tests/session-lifecycle-test.sh"'
 check "copias externas: marcador de destino obligatorio y comprobado antes del volcado" 'grep -q "dest_check" "$HERE/scripts/backup.sh" && grep -q "destino equivocado" "$HERE/scripts/lib-backup-dest.sh" && [ "$(grep -nv "^\s*#" "$HERE/scripts/backup.sh" | grep "dest_check" | head -1 | cut -d: -f1)" -lt "$(grep -nv "^\s*#" "$HERE/scripts/backup.sh" | grep "pg_dump" | head -1 | cut -d: -f1)" ]'
 check "copias externas: subida con .partial y suma remota antes de renombrar" 'grep -q "\.partial" "$HERE/scripts/lib-backup-dest.sh" && grep -q "la suma remota" "$HERE/scripts/lib-backup-dest.sh"'
 check "copias externas: prune rechazado para buckets" 'grep -q "ciclo de vida" "$HERE/scripts/backup-remote.sh"'
+check "Mailpit (SMTP falso) solo existe en el override de validación" '! grep -q "mailpit" "$HERE/compose.yaml" && ! grep -q "mailpit" "$HERE/compose.staging.yaml" && grep -q "axllent/mailpit:.*@sha256:" "$HERE/tests/compose.validation.yaml"'
+check "propuesta HTTPS: host por variable, sin registro de accesos, solo hacia el gateway" 'grep -q "{\$TURNO_PUBLIC_HOST}" "$HERE/proxy/turnocontrol.caddy" && grep -q "output discard" "$HERE/proxy/turnocontrol.caddy" && grep -q "reverse_proxy turnocontrol-gateway:8000" "$HERE/proxy/turnocontrol.caddy"'
+check "plantilla assetlinks sin valores reales" 'grep -q "<paquete-de-la-app>" "$HERE/proxy/assetlinks.json.example"'
 check "las copias nunca usan git" '! grep -nE "\bgit (add|commit|push)" "$HERE/scripts/backup.sh"'
 
 # SQL consistency (static).

@@ -1,0 +1,29 @@
+# PROPOSAL (phase 5F.1D) — NOT applied anywhere. Option A of DEPLOYMENT_PLAN.md §4: a site block the owner may add to the
+# EXISTING edge Caddy (e.g. via `import`), after approving the domain, the port and the network attachment.
+# Validated with `caddy validate` against Caddy v2.11.4 (the version the existing proxy runs) and v2.11.9.
+#   TURNO_PUBLIC_HOST  the approved public host name (no value is invented here)
+# The edge Caddy obtains and renews the certificate itself (ACME), exactly as it does for the existing site.
+{$TURNO_PUBLIC_HOST} {
+	encode gzip
+	request_body {
+		max_size 2MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+	# Android App Links (e-mail links opening the app) need /.well-known/assetlinks.json on THIS host, on port 443.
+	# Template: proxy/assetlinks.json.example (package name and signing-certificate SHA-256 are owner inputs).
+	handle /.well-known/assetlinks.json {
+		root * /srv/turnocontrol-wellknown
+		file_server
+	}
+	handle {
+		reverse_proxy turnocontrol-gateway:8000
+	}
+	log {
+		output discard
+	}
+}

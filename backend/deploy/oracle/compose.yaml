@@ -146,7 +146,7 @@ services:
       # Rate limits (per hour for e-mail; per 5 min per IP for the rest). The client IP comes from a header that the
       # gateway ALWAYS overwrites, so clients cannot spoof it.
       GOTRUE_RATE_LIMIT_HEADER: X-Turno-Client-Ip
-      GOTRUE_RATE_LIMIT_EMAIL_SENT: "10"
+      GOTRUE_RATE_LIMIT_EMAIL_SENT: ${TURNO_RATE_LIMIT_EMAIL_SENT:-10}
       GOTRUE_RATE_LIMIT_VERIFY: "30"
       GOTRUE_RATE_LIMIT_TOKEN_REFRESH: "150"
       GOTRUE_RATE_LIMIT_OTP: "10"

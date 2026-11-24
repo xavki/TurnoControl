@@ -13,8 +13,12 @@ Las copias de TurnoControl son **independientes de cualquier otra copia del serv
 | Frecuencia | Diaria a las **04:00 UTC**, lejos de otras tareas nocturnas del servidor. La tarea programada **no está instalada**. |
 | Cifrado | `age` con la clave pública de TurnoControl. El volcado pasa directamente a `age`, así que **no hay ninguna copia en claro en el disco**. La clave privada vive fuera del servidor. |
 | Local | `TURNO_BACKUP_DIR` (la ruta debe contener `turnocontrol`), con permisos 700 y 7 días de retención. Solo se borran archivos `turnocontrol-db-*.{dump.age,roles.sql.age,sha256}` del primer nivel de ese directorio. |
-| Fuera del servidor | **Obligatorio.** `rclone copyto --immutable` a un bucket compatible con S3 (por ejemplo Object Storage del mismo proveedor en la UE). Si no está configurado, el script falla, salvo que se indique `TURNO_BACKUP_ALLOW_LOCAL_ONLY=1`. |
-| Retención externa | Una regla de ciclo de vida del bucket conserva unos 30 días, y opcionalmente copias mensuales hasta 6 meses. El script nunca borra nada en remoto. |
+| Fuera del servidor | **Obligatorio.** Adaptadores en `scripts/lib-backup-dest.sh`: `dir` (ruta montada) o `rclone` (bucket compatible con S3, por ejemplo Object Storage en la UE). Si no hay destino, el script falla, salvo que se indique `TURNO_BACKUP_ALLOW_LOCAL_ONLY=1`. **Destino sin decidir.** |
+| Destino correcto | El destino tiene que tener el marcador `.turnocontrol-backup-destination` con el contenido de `TURNO_BACKUP_DEST_ID`. Se comprueba **antes** de volcar nada; un destino sin el marcador exacto se rechaza. |
+| Subida | `<nombre>.partial`, comprobación del sha256 **remoto** y renombrado. Un corte deja como mucho un `.partial`, que la ejecución siguiente borra. Nunca se sobrescribe. |
+| Credencial | La del VPS, **solo de escritura** en el bucket, guardada en la configuración de rclone (permisos 600). Para leer o restaurar se usa otra credencial, que guarda el propietario. |
+| Retención externa | Una regla de ciclo de vida del bucket conserva unos 30 días; opcionalmente, retención de objetos (WORM) contra borrados accidentales o maliciosos. Los scripts nunca borran en un bucket (`backup-remote.sh prune` solo funciona con `dir`, en simulación por defecto, y no borra nunca todas las copias). |
+| Supervisión | `scripts/backup-remote.sh status`: antigüedad de la copia externa más reciente y verificación completa de su integridad (la descarga y la comprueba). |
 | Integridad | sha256 de cada archivo, cabecera `age` y tamaño mayor que cero (`verify-backup.sh`, tras cada copia). |
 | Prueba de restauración | **Mensual**, con `restore-drill.sh`: contenedor desechable sin red, la misma imagen, verificación SQL y recuento de filas. |
 | Alertas | `healthcheck.sh` avisa si no hay una copia de menos de 26 h. |
@@ -57,6 +61,7 @@ Hay que volver a aplicar `db/hardening/*.sql` y `backend/supabase/migrations/202
 |---|---|
 | **Borrado accidental de datos de una cuenta** | Restaurar la copia en el contenedor del simulacro, extraer las filas de esa cuenta y reinsertarlas con una transacción revisada. Los dispositivos vuelven a sincronizar a partir del cursor. |
 | **Datos corruptos** | Detener solo `turnocontrol-rest` y `turnocontrol-auth`. Hacer una copia del estado actual. Restaurar la última copia válida en una base nueva con `pg_restore` en un volumen nuevo y cambiar a ella, o restaurar en el mismo volumen tras una copia física. Volver a aplicar `db/hardening`. Ejecutar `verify_deployment.sql`. Arrancar. |
+| **Pérdida del VPS (detallado)** | 1. Con la credencial de lectura, `backup-remote.sh fetch latest <dir>`, que descarga y verifica. 2. En la VM nueva: `.env` desde el gestor de contraseñas, `compose up` con el volumen vacío y `migrate.sh --apply --first-install`. 3. `pg_restore --data-only` de `auth`, `turno` y `turno_ops`. 4. Volver a aplicar `db/hardening` y `db/privileges`, y ejecutar `verify_deployment.sql`. La clave privada age solo existe fuera del VPS: sin ella, las copias son irrecuperables. Guarda dos copias en lugares distintos. |
 | **Pérdida del VPS** | Nueva VM ARM64 con Docker, la carpeta del repositorio, el `.env` desde el gestor de contraseñas (con los mismos secretos, para que las sesiones y la clave anon sigan valiendo), `docker compose up -d` con el volumen vacío, `migrate.sh --apply --first-install`, `pg_restore --data-only` de los esquemas `auth` y `turno` y la verificación. Los clientes vuelven a enviar lo que tengan pendiente en su outbox. **Por verificar** en el primer simulacro completo. |
 | **Actualización fallida** | `ROLLBACK_PLAN.md` §5. |
 
@@ -65,3 +70,12 @@ Hay que volver a aplicar `db/hardening/*.sql` y `backend/supabase/migrations/202
 - la restauración tarda menos de 4 h.
 
 Para reducir la pérdida máxima haría falta archivado WAL, que queda fuera del alcance.
+
+## 6. Borrado de cuentas y copias
+- Un borrado elimina los datos de la base al momento. Las copias cifradas anteriores los conservan hasta que caducan: 7 días en local y unos 30 en el destino externo. **Borrar de forma selectiva dentro de un volcado cifrado no es viable**: habría que descifrarlo, editarlo y volver a cifrarlo, lo que rompe la integridad y la custodia de la clave. La política de privacidad debe indicar ese plazo.
+- **Riesgo al restaurar:** restaurar una copia anterior a un borrado **devolvería esa cuenta**. Mitigación propuesta (decisión del propietario, no implementada): guardar durante el plazo de retención de las copias un registro de borrados con el id con hash y una «pimienta» del servidor, para reaplicar los borrados tras cualquier restauración, y purgarlo después. Mientras no exista, cualquier restauración debe revisar manualmente los borrados ocurridos después de la fecha de la copia.
+
+## 7. Claves
+- La clave privada age vive **fuera del VPS**, en dos sitios: el gestor de contraseñas del propietario y un soporte sin conexión. En el VPS solo está la clave pública.
+- **Rotación:** nueva pareja de claves. La privada antigua se conserva mientras existan copias cifradas con ella (unos 30 días).
+- **Prueba de restauración mensual:** `backup-remote.sh fetch` y `restore-drill.sh` en el equipo del propietario, que es donde está la clave.

@@ -19,6 +19,22 @@ services:
     container_name: turnocontrol-validation-5f1c0-gateway
     labels:
       turnocontrol.validation: "5f1c0"
+  # Fake SMTP server for the e-mail tests (validation ONLY; never part of compose.yaml or staging). It captures every
+  # message; nothing leaves the host. API/UI on 127.0.0.1:18025 for tests/email-auth-test.sh.
+  turnocontrol-mailpit:
+    container_name: turnocontrol-validation-5f1c0-mailpit
+    image: axllent/mailpit:v1.34.0@sha256:23a2ef85bc50853ab3093645d1d64679afd8887e89da5e48a88940c172591a4e
+    restart: "no"
+    networks: [turnocontrol_internal, turnocontrol_edge]
+    ports:
+      - "127.0.0.1:18025:8025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+      MP_MAX_MESSAGES: "500"
+    mem_limit: 128m
+    labels:
+      turnocontrol.validation: "5f1c0"
 
 networks:
   turnocontrol_internal:

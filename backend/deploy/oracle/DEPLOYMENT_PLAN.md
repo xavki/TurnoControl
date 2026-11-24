@@ -25,7 +25,7 @@ Cada etapa requiere la autorización expresa del propietario. Ninguna etapa toca
 ## 3. Migración de la base de datos
 **Orden de inicialización:**
 1. **Primer arranque de `turnocontrol-db`, con el volumen vacío.** La imagen crea los roles de Supabase (`anon`, `authenticated`, `service_role`, `authenticator`, `supabase_auth_admin`…), el esquema `auth` inicial, las extensiones y los privilegios por defecto. Después, `db/init/99-turno-roles.sql` da contraseñas propias a `authenticator` y `supabase_auth_admin`.
-2. **Arranque de `turnocontrol-auth`.** GoTrue aplica sus migraciones al esquema `auth`, incluida `auth.uid()` leyendo `request.jwt.claims`.
+2. **Arranque de `turnocontrol-auth`** (las migraciones de 5F.1D dependen de las tablas de GoTrue: `auth.sessions`, `auth.flow_state`).** GoTrue aplica sus migraciones al esquema `auth`, incluida `auth.uid()` leyendo `request.jwt.claims`.
 3. **`scripts/migrate.sh --apply --first-install`, manual y opt-in.** Lo ejecuta `supabase_admin` (superusuario) por el socket local del contenedor. Pasos:
    1. comprueba que el contenedor es el de este proyecto y que `auth.uid()` ya es la versión de GoTrue;
    2. crea `turno_deploy.applied_files`, el registro de archivos aplicados;
@@ -65,6 +65,14 @@ El servidor ya tiene un proxy inverso de otro proyecto (`<proxy-existente>`) que
 | Certificado | El proxy existente lo obtiene para el subdominio nuevo | ACME necesita el puerto 80 o 443, que ya están ocupados, o un reto DNS con API del proveedor de DNS |
 | Riesgo para otros servicios | Bajo si se valida antes y se recarga sin cortes, aunque crea una dependencia entre proyectos | Nulo en tiempo de ejecución, pero alto en complejidad (puertos y certificados) |
 | Complejidad | Baja | Alta |
+
+**Archivos de la propuesta (5F.1D, no aplicados):**
+- `proxy/turnocontrol.caddy`: bloque del sitio, con cabeceras de seguridad, `assetlinks.json` y sin registro de accesos;
+- `proxy/edge-network.compose.example.yaml`: unión del proxy existente a la red `turnocontrol_edge`;
+- `proxy/assetlinks.json.example`: plantilla de App Links;
+- `proxy/option-b-dedicated-proxy.compose.example.yaml`: solo para comparar.
+
+El bloque se ha validado con `caddy validate` usando **la misma versión exacta del proxy existente (v2.11.4, mismo digest)** y la 2.11.9, importado en un Caddyfile que imita la estructura del existente. Sin el nombre de host configurado falla cerrado, sin crear un sitio comodín.
 
 **Recomendación: opción A, una vez aprobada.** Procedimiento seguro, para la fase 5F.1C o posterior:
 1. Hacer una copia del archivo de configuración actual del proxy en el servidor (fuera de Git).
@@ -113,12 +121,36 @@ Ya preparado en `compose.yaml`:
 
 No se ha configurado ningún SMTP ni se ha enviado ningún correo.
 
-**Borrado de cuenta:** GoTrue no tiene un endpoint para que el propio usuario se borre. Opciones:
-1. una RPC `SECURITY DEFINER` propia que borre la fila de `auth.users` de la cuenta de la sesión (los datos caen en cascada);
-2. un pequeño endpoint del servidor que use la API de administración;
-3. un procedimiento manual mientras haya pocos usuarios.
+**Borrado de cuenta:** implementado en 5F.1D (`public.delete_my_account`, ver `ACCOUNT_LIFECYCLE.md`). Pendiente de desplegar.
 
-Es una **decisión pendiente**, que necesitará sus propias pruebas.
+**Probado en 5F.1D, con un SMTP falso (Mailpit) y direcciones `@example.invalid`; 41/41 en `tests/email-auth-test.sh`:**
+- confirmación con PKCE (el flujo de la app) y en modo implícito;
+- el código PKCE no se puede canjear dos veces, y el enlace es de un solo uso;
+- enlace manipulado o caducado (más de `TURNO_MAILER_OTP_EXP`): error, y la cuenta sigue sin confirmar;
+- reenvío;
+- recuperación de contraseña: sesión de recuperación, contraseña nueva, y la anterior deja de valer;
+- cambio de correo con doble confirmación: no cambia hasta confirmar desde la dirección antigua y la nueva;
+- resistencia a la enumeración: el alta de un correo existente, la recuperación de un correo inexistente y la contraseña errónea dan la misma respuesta;
+- direcciones inválidas;
+- límites: uno por minuto y usuario, tope global por hora, y 30 verificaciones cada 5 min por IP.
+
+**Que esto pase no significa que el correo de producción esté listo:** falta el proveedor, el dominio y su reputación.
+
+### Proveedor SMTP: recomendación (fuentes oficiales, noviembre de 2026)
+| Proveedor | Coste con poco uso | SMTP/API | Dominio propio | Notas |
+|---|---|---|---|---|
+| **OCI Email Delivery** | **3.000 correos/mes gratis** («Always Free»); después, 0,085 USD por cada 1.000 | SMTP con TLS en el 587; API | Exige remitente aprobado; SPF y DKIM necesarios para ampliar límites | Mismo proveedor que el VPS. **Hay que confirmar que está disponible en la región del VPS** (no está garantizado en todas; se puede usar el endpoint de otra región de la UE). |
+| Resend | 3.000/mes, máximo 100/día gratis | SMTP y API | **Obligatorio** (verificación DNS) | Configuración sencilla, sin modo sandbox |
+| Brevo | 300/día gratis | SMTP relay y API | Recomendado (SPF/DKIM/DMARC); el relay SMTP se activa a petición | Alternativa europea |
+
+**Gmail (y otros grandes proveedores) exigen a todos los remitentes** SPF o DKIM, DNS directo e inverso válidos y TLS; a los que envían más de 5.000 al día, también DMARC. **Sin un dominio propio cuyo DNS controle el propietario no hay entrega fiable en producción.** El correo de producción queda bloqueado hasta disponer de ese dominio.
+
+**Recomendación:** OCI Email Delivery, si está disponible para la región; si no, Resend. En los dos casos:
+- un subdominio de envío propio con SPF, DKIM y DMARC (`p=none` al principio);
+- puerto 587 con STARTTLS;
+- credenciales solo en `.env`.
+
+Fuentes: [OCI Email Delivery FAQ](https://www.oracle.com/application-development/email-delivery/faq/), [OCI Always Free](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm), [OCI SMTP](https://docs.oracle.com/en/cloud/paas/analytics-cloud/acabi/use-smtp-mail-server-oracle-cloud-infrastructure-email-delivery.html), [OCI remitentes aprobados](https://docs.oracle.com/en-us/iaas/Content/Email/Tasks/managingapprovedsenders.htm), [Resend: precios](https://resend.com/docs/knowledge-base/what-is-resend-pricing), [Resend: cuotas](https://resend.com/docs/knowledge-base/account-quotas-and-limits), [Brevo: SMTP gratuito](https://www.brevo.com/free-smtp-server/), [Gmail: requisitos para remitentes](https://support.google.com/mail/answer/81126?hl=en).
 
 ## 6. Google (preparado y desactivado)
 - `GOTRUE_EXTERNAL_GOOGLE_ENABLED` está fijado a `"false"` en `compose.yaml`. Activarlo supone un cambio revisado de ese archivo.

@@ -1,0 +1,14 @@
+# PROPOSAL — NOT applied. What the EXISTING proxy's compose file would need (owned by another project; its owner applies
+# it): join TurnoControl's edge network so `reverse_proxy turnocontrol-gateway:8000` resolves. Nothing is published.
+# A live, reversible equivalent without recreating the proxy:  docker network connect turnocontrol_edge <proxy container>
+services:
+  <proxy-service>:
+    networks:
+      - default
+      - turnocontrol_edge
+    volumes:
+      # Read-only directory holding assetlinks.json (App Links), if App Links are approved.
+      - <path>/turnocontrol-wellknown:/srv/turnocontrol-wellknown:ro
+networks:
+  turnocontrol_edge:
+    external: true

@@ -22,6 +22,12 @@
 | `tests/data-integrity-test.sh` | Turnos normal, partido, nocturno y con horas extra, vacaciones, libre y baja; días inválidos, conflicto, lápida, aislamiento y paginación. |
 | `tests/session-lifecycle-test.sh` | Rotación y reutilización de refresh tokens y caducidad real del token de acceso. |
 | `tests/sql/*.sql` | Consultas de verificación de solo lectura. |
+| `ACCOUNT_LIFECYCLE.md` | Sesiones (intervalo 0), borrado de cuenta, retención y dispositivos sin conexión durante mucho tiempo. |
+| `proxy/` | Propuesta HTTPS (no aplicada): bloque Caddy, red del proxy, plantilla `assetlinks.json` y comparación con la opción B. |
+| `db/privileges/90_rpc_privileges.sql` | Base de privilegios re-ejecutable (después de cada migración y de cada restauración). |
+| `scripts/retention.sh` | Purga de retención para el operador (simulación por defecto). |
+| `scripts/lib-backup-dest.sh`, `scripts/backup-remote.sh` | Destinos de copias externas (`dir` o `rclone`) con marcador; `status`, `fetch` y `prune`. |
+| `tests/refresh-token-policy-test.sh`, `tests/account-deletion-test.sh`, `tests/backup-destination-test.sh`, `tests/email-auth-test.sh` | Pruebas de 5F.1D (la de correo usa Mailpit del override de validación). |
 | `SECURITY.md` | Secretos, exposición, registros, privacidad y aspectos legales. |
 | `DEPLOYMENT_PLAN.md` | Requisitos previos, etapas, migración, Caddy, correo, Google y Android. |
 | `BACKUP_PLAN.md` | Copias, restauración y recuperación ante desastres. |
