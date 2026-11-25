@@ -54,3 +54,6 @@ restore-target.json
 # Private technical reports and internal planning notes.
 INFORME_*.md
 docs/superpowers/
+
+# Release signing settings (passwords, key path): never committed.
+release-signing.properties

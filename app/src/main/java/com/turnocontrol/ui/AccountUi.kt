@@ -55,8 +55,9 @@ data class AccountPresentation(
     val showContinueWithoutAccount: Boolean, val showSignOut: Boolean, val details: List<String>,
 )
 
-const val PROVIDERS_UNAVAILABLE = "Todavía no disponible: el inicio de sesión se activará cuando la conexión segura esté lista. " +
-    "Mientras tanto, TurnoControl funciona sin cuenta y sin Internet."
+/** Accounts and sync arrive in 0.4.0; this release ships without them (no provider, no INTERNET permission). */
+const val ACCOUNTS_RELEASE = "Disponible en la versión 0.4.0"
+const val PROVIDERS_UNAVAILABLE = "$ACCOUNTS_RELEASE. Mientras tanto, TurnoControl funciona sin cuenta y sin Internet."
 
 fun AccountUiState.presentation(providersAvailable: Boolean): AccountPresentation = when (this) {
     AccountUiState.Guest -> AccountPresentation("Sin cuenta",
@@ -65,7 +66,7 @@ fun AccountUiState.presentation(providersAvailable: Boolean): AccountPresentatio
     is AccountUiState.Authenticated -> AccountPresentation("Sesión iniciada como $maskedEmail",
         "Los datos de esta cuenta se guardan aparte de los datos sin cuenta.", providersEnabled = false, providerNote = null,
         showContinueWithoutAccount = false, showSignOut = true,
-        details = listOfNotNull("Acceso con $provider", "Sincronización: todavía no disponible", pendingChanges?.let { "Cambios pendientes de sincronizar: $it" },
+        details = listOfNotNull("Acceso con $provider", "Sincronización: ${ACCOUNTS_RELEASE.replaceFirstChar { it.lowercase() }}", pendingChanges?.let { "Cambios pendientes de sincronizar: $it" },
             conflicts?.takeIf { it > 0 }?.let { "Conflictos sin resolver: $it" }))
     is AccountUiState.Expired -> AccountPresentation("Sesión caducada ($maskedEmail)", AccountProblem.SESSION_EXPIRED.message,
         providersAvailable, PROVIDERS_UNAVAILABLE.takeUnless { providersAvailable }, showContinueWithoutAccount = false, showSignOut = true, details = emptyList())
@@ -133,6 +134,8 @@ fun AccountSummaryCard(model: AccountViewModel, onOpen: () -> Unit) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Cuenta", style = MaterialTheme.typography.titleMedium)
             Text(presentation.status, style = MaterialTheme.typography.bodyLarge)
+            if (!state.providersAvailable) Text(ACCOUNTS_RELEASE, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("account-summary-availability"))
             OutlinedButton(onClick = onOpen, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Opciones de cuenta") }
         }
     }
@@ -166,9 +169,9 @@ fun AccountContent(state: AccountScreenState, onBack: () -> Unit, onSignOut: () 
             if (state.account !is AccountUiState.Authenticated) {
                 val signIn = if (state.account is AccountUiState.Expired) "Iniciar sesión de nuevo" else "Iniciar sesión"
                 Button(onClick = {}, enabled = presentation.providersEnabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("account-signin")
-                    .semantics { contentDescription = if (presentation.providersEnabled) signIn else "$signIn, todavía no disponible" }) { Text(signIn) }
+                    .semantics { contentDescription = if (presentation.providersEnabled) signIn else "$signIn, ${ACCOUNTS_RELEASE.lowercase()}" }) { Text(signIn) }
                 if (state.account == AccountUiState.Guest) OutlinedButton(onClick = {}, enabled = presentation.providersEnabled, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("account-create")
-                    .semantics { contentDescription = if (presentation.providersEnabled) "Crear cuenta" else "Crear cuenta, todavía no disponible" }) { Text("Crear cuenta") }
+                    .semantics { contentDescription = if (presentation.providersEnabled) "Crear cuenta" else "Crear cuenta, ${ACCOUNTS_RELEASE.lowercase()}" }) { Text("Crear cuenta") }
                 presentation.providerNote?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.testTag("account-provider-note")) }
             }
             if (presentation.showContinueWithoutAccount) {
@@ -176,7 +179,7 @@ fun AccountContent(state: AccountScreenState, onBack: () -> Unit, onSignOut: () 
             }
             if (state.account is AccountUiState.Authenticated) {
                 OutlinedButton(onClick = {}, enabled = false, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("account-switch")
-                    .semantics { contentDescription = "Cambiar de cuenta, todavía no disponible" }) { Text("Cambiar de cuenta") }
+                    .semantics { contentDescription = "Cambiar de cuenta, ${ACCOUNTS_RELEASE.lowercase()}" }) { Text("Cambiar de cuenta") }
             }
             if (presentation.showSignOut) {
                 OutlinedButton(onClick = onSignOut, enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("account-signout")) { Text("Cerrar sesión") }

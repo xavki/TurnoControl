@@ -20,6 +20,15 @@ Ninguno de estos puntos se ha clasificado como P0 ni P1. Origen: lectura de cód
 - Los borradores de edición y de revisión OCR se pierden si el sistema mata el proceso (sin `SavedStateHandle`).
 - Tras guardar una importación, la pantalla de revisión conserva los borradores hasta una nueva importación.
 
+## Detectados en la verificación de 0.3.0 en el Samsung A53 (2026-11-25, P2)
+- Al cambiar de mes en Calendario se conserva el número de día seleccionado (por ejemplo, el 25 de octubre queda resaltado aunque hoy sea el 25 de noviembre). «Hoy» sigue marcado con borde.
+- Texto en singular: los diálogos de vacaciones y baja médica dicen «Se marcarán 1 día como…».
+- La vista Semana solo muestra los puntos de tipo de día, sin horas, y debajo sigue el «Resumen del mes».
+- El tema oscuro solo depende del interruptor de Ajustes (desactivado por defecto); la app no sigue el tema oscuro del sistema.
+- OCR con la foto inclinada: con un cuadrante sintético, 0° y 4° dan los 7 días correctos; con 8° y 12° no se reconstruyen las filas (se ofrecen bandas horizontales mezcladas). No se guarda nada erróneo: la revisión lo impide y queda la vía manual.
+- Texto al 200 % **y** zoom de pantalla al máximo a la vez: en el editor de turnos, «Guardar registro» se solapa visualmente con «Cancelar registro» y el contenido queda en una franja pequeña (se puede desplazar y los dos botones responden); el botón «Hoy» se parte en dos líneas. Con texto al 200 % y la densidad habitual todo cabe.
+- TalkBack: cada día del calendario se anuncia con la fecha en formato ISO («2026-10-12 · Trabajo») en lugar de «lunes, 12 de octubre».
+
 ## Cuentas y sincronización (antes de activar la sincronización real)
 - `REVIEW_REQUIRED` tras restaurar una copia en una base vinculada: no existe ninguna operación para revisarla y reanudar la sincronización. Hace falta decidir el diseño (probablemente un plan de fusión como el de la primera vinculación) antes de sincronizar de verdad.
 - El reinicio controlado de pantallas (`AccountSwitchRestart`) solo se lanza tras cerrar sesión. El inicio de sesión y el cambio de cuenta (`AuthCoordinator.commitNewAuthentication`) necesitarán el mismo evento cuando exista un proveedor. El evento está probado a nivel de ViewModel; el reinicio de la Activity, no.
@@ -27,8 +36,9 @@ Ninguno de estos puntos se ha clasificado como P0 ni P1. Origen: lectura de cód
 - Lista completa para el servidor: `docs/INTEGRACION_ORACLE_CHECKLIST.md`.
 
 ## Pruebas y entorno
-- Ejecutar la suite instrumentada de 0.2.0 (`connectedVerificationAndroidTest`) en un dispositivo o emulador y regenerar las capturas con `PortfolioScreenshotsTest`: en la preparación de 0.2.0 solo se compiló.
-- Probar la selección desde la galería con una imagen real, otras versiones de Android y recuperación tras fallo de escritura en dispositivo.
+- Regenerar las capturas con `PortfolioScreenshotsTest`.
+- Probar la importación con fotos reales de cuadrantes (en 0.3.0 solo se usaron cuadrantes sintéticos), otras versiones de Android y recuperación tras fallo de escritura en dispositivo.
+- Escuchar el recorrido con TalkBack real: en 0.3.0 solo se revisó el árbol de accesibilidad y los tests automáticos.
 - El SIGSEGV de `libhwui` observado por Codex no se reprodujo; queda sin explicar.
 - `captureDialog` en `PortfolioScreenshotsTest` y las pruebas de intents dependen del foco de ventana: en emuladores headless conviene ocultar los diálogos de error del sistema.
 - Mantenimiento de lint: 21 `UseTomlInstead` y 1 `KaptUsageInsteadOfKsp`.
