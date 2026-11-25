@@ -30,12 +30,11 @@ Se completa en orden. Si algún punto falla, se detiene la publicación. Ningún
 
 ## 5. Firma y compatibilidad
 - [ ] El certificado de la APK nueva coincide con el de la instalada: `apksigner verify --print-certs` sobre las dos.
-  - Hoy ambas se firman con la clave de depuración local. Huella SHA-256: `9e94c004…0ff415`.
-- [ ] **La clave de depuración (`~/.android/debug.keystore`) tiene una copia guardada fuera del repositorio.** Si se pierde, la app instalada no se puede actualizar sin desinstalarla, y desinstalar borra los datos.
-- [ ] No se crea ni se cambia una clave de firma sin la aprobación expresa del usuario. Opciones documentadas:
-  1. **Seguir con la clave de depuración (estado actual).** Es compatible con lo instalado, pero la APK es `debuggable` y cualquiera con adb puede leer sus datos.
-  2. **Configurar una firma «release» con esa misma clave.** Es compatible y permite una APK no depurable. Requiere guardar la clave y sus contraseñas de forma segura, fuera de Git.
-  3. **Clave release nueva.** Es incompatible: obliga a desinstalar. Solo es posible exportando antes una copia de seguridad y restaurándola después.
+  - Desde 0.3.0 la release se firma con la clave de release propia (alias `turnocontrol`, RSA 4096), fuera del repositorio. Huella SHA-256: `cbc0537b…a10de7`.
+  - `release-signing.properties` (ignorado por Git) indica la ruta del almacén, el alias y las contraseñas. Sin ese archivo, la release sale sin firmar.
+- [ ] **El almacén de la clave de release tiene copias cifradas fuera del equipo, y su contraseña está aparte, en un gestor de contraseñas.** Si se pierde la clave, ninguna versión nueva se podrá instalar encima: habrá que desinstalar, y desinstalar borra los datos.
+- [ ] No se crea ni se cambia una clave de firma sin la aprobación expresa del usuario. Cambiar de clave obliga a desinstalar: solo es posible exportando antes una copia de seguridad y restaurándola después.
+  - Historial: hasta 0.2.0 se firmaba con la clave de depuración local (`9e94c004…0ff415`). La 0.3.0 cambió a la clave de release, así que no se instala encima de esas versiones.
 
 ## 6. Actualización y vuelta atrás
 - [ ] La actualización se hace con `adb install -r <apk>` (conserva Room y DataStore), nunca con desinstalación previa.

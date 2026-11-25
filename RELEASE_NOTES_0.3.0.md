@@ -26,7 +26,10 @@ Esta versión funciona **sin cuenta y sin Internet**. Las cuentas y la sincroniz
 - Los datos sin cuenta siguen en `turnocontrol.db`, el archivo de siempre. Cuando llegue la 0.4.0, cada cuenta tendrá su propia base aparte.
 
 ## Compatibilidad y actualización
-- **Firma:** la APK release se firma con el mismo certificado que las instalaciones existentes (SHA-256 `9e94c004…0ff415`). Por eso se puede instalar encima con `adb install -r` sin perder datos. La APK **ya no es depurable**.
+- **Firma:** la APK publicada se firma con una **clave de release propia** (alias `turnocontrol`, RSA 4096; certificado SHA-256 `cbc0537bd1bfbcf2fce13d13e742141246455d8770522a4cb32d059996a10de7`). La APK **no es depurable**.
+  - Las versiones anteriores estaban firmadas con la clave de depuración local (`9e94c004…0ff415`), así que **esta APK no se instala encima de ellas**: hay que exportar una copia desde Ajustes → Copia de seguridad, desinstalar, instalar la 0.3.0 y restaurar la copia.
+  - Las próximas versiones se firmarán con esta misma clave y se podrán instalar encima.
+  - Esta sección se corrigió después del tag `v0.3.0`, cuyas notas todavía describen la firma con la clave de depuración.
 - **Base de datos:** Room sigue en la versión 5, igual que en 0.2.0. Las instalaciones 0.0.1 (versión 4) migran de 4 a 5 conservando días, intervalos, perfil y contrato. Se ha probado con una copia de datos reales en un emulador aislado (ver «Pruebas»).
 - `DataFormat` sigue en 2 y las copias de seguridad en formato 1. Las copias de 0.2.0 se siguen pudiendo restaurar.
 - **No se admite volver a una versión anterior.** Las versiones 0.1.0 y anteriores no detectan datos de una versión más nueva.
@@ -36,12 +39,14 @@ Esta versión funciona **sin cuenta y sin Internet**. Las cuentas y la sincroniz
 - JVM (`testDebugUnitTest`): 384/384.
 - Lint debug y release: 0 errores.
 - Instrumentadas (`connectedVerificationAndroidTest`): 48/48, en un emulador API 35.
-- APK release:
-  - `apksigner verify`: firma v2 válida, certificado idéntico al de la app instalada;
+- APK release publicada (compilada desde el commit del tag `v0.3.0` y firmada con la clave de release):
+  - `apksigner verify`: firma v2 válida, certificado `CN=Xavi Martinez, O=TurnoControl, C=ES`;
   - no depurable;
   - sin permisos de red;
   - `zipalign` correcto;
-  - SHA-256 de la APK entregada: `b9f3fae7306b08b8de1e62903f689298dbec0f929a59e26fd0f476d7e41ca1f0`.
+  - SHA-256 de la APK: `2baac3ccb73b9311532c4e2edddca12a42a974d633546e330a895bff1f70582f`.
+  - En el Samsung A53: instalación limpia (tras desinstalar la anterior) y `adb install -r` con la misma APK; arranca sin errores.
+- Las pruebas siguientes se hicieron antes del cambio de clave, con la misma compilación firmada con la clave de depuración (SHA-256 `b9f3fae7…41ca1f0`); el código es idéntico.
 - Actualización simulada, en un emulador desechable de solo lectura:
   - se instaló la APK 0.0.1 real del teléfono con una copia de sus datos;
   - se actualizó a la 0.3.0 con `install -r` (compilación previa al aviso de la tarjeta de Ajustes; solo cambia ese texto);
@@ -65,4 +70,4 @@ Véanse `PENDIENTES_FUTUROS.md`, `docs/DECISIONES_NOMINA_0.3.0.md` y `docs/INTEG
 - el OCR se ha probado en el A53 con cuadrantes sintéticos; con la foto inclinada 8° o más no reconstruye las filas y hay que usar la vía manual;
 - con texto al 200 % y el zoom de pantalla al máximo, los botones del editor de turnos se solapan visualmente (siguen funcionando);
 - la privacidad de ML Kit y del canal de Google Play services no está verificada del todo;
-- el certificado de firma es el de depuración local. Su archivo de claves es el único medio para publicar actualizaciones compatibles y debe guardarse con copias cifradas fuera del equipo.
+- la clave de release es el único medio para publicar actualizaciones que se instalen encima: debe guardarse con copias cifradas fuera del equipo, y su contraseña aparte, en un gestor de contraseñas.

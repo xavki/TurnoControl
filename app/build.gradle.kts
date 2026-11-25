@@ -28,9 +28,9 @@ android {
     val netExperiment = (project.findProperty("turnocontrol.netExperiment") as String?)
         ?.takeIf { it == "networkBaselineVerification" || it == "networkStrategyBVerification" }
     // Release signing reads an untracked properties file (release-signing.properties at the repo root, or the path in
-    // -Pturnocontrol.signingProperties): storeFile, storePassword, keyAlias, keyPassword. It points at the EXISTING key
-    // that signed the installed builds (docs/LISTA_PUBLICACION.md §5, option 2), so `install -r` keeps the user's data.
-    // Without the file, release stays unsigned, as before. The key is only read, never copied or changed.
+    // -Pturnocontrol.signingProperties): storeFile, storePassword, keyAlias, keyPassword. Since 0.3.0 it points at the
+    // dedicated release key kept outside the repo (docs/LISTA_PUBLICACION.md §5); later releases must use the same key so
+    // `install -r` keeps the user's data. Without the file, release stays unsigned. The key is only read, never changed.
     val signingFile = rootProject.file(project.findProperty("turnocontrol.signingProperties") as String? ?: "release-signing.properties")
     val releaseSigning = if (signingFile.isFile) Properties().apply { signingFile.inputStream().use { load(it) } } else null
     if (releaseSigning != null) signingConfigs.create("release") {
